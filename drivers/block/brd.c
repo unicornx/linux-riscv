@@ -44,6 +44,9 @@ struct brd_device {
 	 */
 	struct xarray	        brd_pages;
 	u64			brd_nr_pages;
+
+	void                    *brd_mem_base_addr;
+	size_t                  brd_mem_size;
 };
 
 /*
@@ -149,6 +152,12 @@ static void copy_to_brd(struct brd_device *brd, const void *src,
 	unsigned int offset = (sector & (PAGE_SECTORS-1)) << SECTOR_SHIFT;
 	size_t copy;
 
+	if (brd->brd_mem_base_addr && brd->brd_mem_size) {
+		dst = brd->brd_mem_base_addr + (sector << SECTOR_SHIFT);
+		memcpy(dst, src, n);
+		return;
+	}
+
 	copy = min_t(size_t, n, PAGE_SIZE - offset);
 	page = brd_lookup_page(brd, sector);
 	BUG_ON(!page);
@@ -180,6 +189,12 @@ static void copy_from_brd(void *dst, struct brd_device *brd,
 	void *src;
 	unsigned int offset = (sector & (PAGE_SECTORS-1)) << SECTOR_SHIFT;
 	size_t copy;
+
+	if (brd->brd_mem_base_addr && brd->brd_mem_size) {
+		src = brd->brd_mem_base_addr + (sector << SECTOR_SHIFT);
+		memcpy(dst, src, n);
+		return;
+	}
 
 	copy = min_t(size_t, n, PAGE_SIZE - offset);
 	page = brd_lookup_page(brd, sector);
@@ -214,16 +229,18 @@ static int brd_do_bvec(struct brd_device *brd, struct page *page,
 	void *mem;
 	int err = 0;
 
-	if (op_is_write(opf)) {
-		/*
-		 * Must use NOIO because we don't want to recurse back into the
-		 * block or filesystem layers from page reclaim.
-		 */
-		gfp_t gfp = opf & REQ_NOWAIT ? GFP_NOWAIT : GFP_NOIO;
+	if (!brd->brd_mem_base_addr || !brd->brd_mem_size) {
+		if (op_is_write(opf)) {
+			/*
+			 * Must use NOIO because we don't want to recurse back into the
+			 * block or filesystem layers from page reclaim.
+			 */
+			gfp_t gfp = opf & REQ_NOWAIT ? GFP_NOWAIT : GFP_NOIO;
 
-		err = copy_to_brd_setup(brd, sector, len, gfp);
-		if (err)
-			goto out;
+			err = copy_to_brd_setup(brd, sector, len, gfp);
+			if (err)
+				goto out;
+		}
 	}
 
 	mem = kmap_atomic(page);
@@ -305,6 +322,26 @@ static int __init ramdisk_size(char *str)
 __setup("ramdisk_size=", ramdisk_size);
 #endif
 
+u64 phys_rd_start = 0;
+u64 phys_rd_size = 0;
+
+static int __init early_rdmem(char *p)
+{
+	u64 start;
+	u64 size;
+	char *endp;
+
+	start = memparse(p, &endp);
+	if (*endp == ',') {
+		size = memparse(endp + 1, NULL);
+
+		phys_rd_start = start;
+		phys_rd_size = size;
+	}
+	return 0;
+}
+early_param("rdmem", early_rdmem);
+
 /*
  * The device scheme is derived from loop.c. Keep them in synch where possible
  * (should share code eventually).
@@ -360,6 +397,23 @@ static int brd_alloc(int i)
 	blk_queue_flag_set(QUEUE_FLAG_NONROT, disk->queue);
 	blk_queue_flag_set(QUEUE_FLAG_SYNCHRONOUS, disk->queue);
 	blk_queue_flag_set(QUEUE_FLAG_NOWAIT, disk->queue);
+
+	if (i == rd_nr-1) {
+		if (phys_rd_start && phys_rd_size) {
+			brd->brd_mem_base_addr = ioremap(phys_rd_start, phys_rd_size);
+
+			if (!brd->brd_mem_base_addr) {
+				pr_info("brd: ioremap %llx, size %llu failed!\n", phys_rd_start, phys_rd_size);
+				brd->brd_mem_size = 0;
+			} else {
+				pr_info("brd: ioremap %llx-%llx, size %llu success!\n", phys_rd_start, (u64)(brd->brd_mem_base_addr), phys_rd_size);
+				brd->brd_mem_size = phys_rd_size;
+			}
+
+			set_capacity(disk, phys_rd_size/512);
+		}
+	}
+
 	err = add_disk(disk);
 	if (err)
 		goto out_cleanup_disk;
