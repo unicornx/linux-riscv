@@ -1,0 +1,135 @@
+/dts-v1/;
+/ {
+	model = "sophgo sg2260";
+	compatible = "sophgo, sg2260_pld";
+	#address-cells = <2>;
+	#size-cells = <2>;
+
+	memory@0 {
+		device_type = "memory";
+		reg = <0x00000000 0x00200000 0x00000000 0x7fe00000>;
+	};
+
+	cpus {
+		#address-cells = <1>;
+		#size-cells = <0>;
+		timebase-frequency = <50000000>;
+		cpu@0 {
+			device_type = "cpu";
+			reg = <0>;
+			status = "okay";
+			compatible = "riscv";
+			riscv,isa = "rv64imafdcv";
+			mmu-type = "riscv,sv48";
+			cpu0_intc: interrupt-controller {
+				#interrupt-cells = <1>;
+				compatible = "riscv,cpu-intc";
+				interrupt-controller;
+			};
+		};
+		cpu@1 {
+			device_type = "cpu";
+			reg = <1>;
+			status = "okay";
+			compatible = "riscv";
+			riscv,isa = "rv64imafdcv";
+			mmu-type = "riscv,sv48";
+			cpu1_intc: interrupt-controller {
+				#interrupt-cells = <1>;
+				compatible = "riscv,cpu-intc";
+				interrupt-controller;
+			};
+		};
+		cpu@2 {
+			device_type = "cpu";
+			reg = <2>;
+			status = "okay";
+			compatible = "riscv";
+			riscv,isa = "rv64imafdcv";
+			mmu-type = "riscv,sv48";
+			cpu2_intc: interrupt-controller {
+				#interrupt-cells = <1>;
+				compatible = "riscv,cpu-intc";
+				interrupt-controller;
+			};
+		};
+		cpu@3 {
+			device_type = "cpu";
+			reg = <3>;
+			status = "okay";
+			compatible = "riscv";
+			riscv,isa = "rv64imafdcv";
+			mmu-type = "riscv,sv48";
+			cpu3_intc: interrupt-controller {
+				#interrupt-cells = <1>;
+				compatible = "riscv,cpu-intc";
+				interrupt-controller;
+			};
+		};
+	};
+
+	soc {
+		#address-cells = <2>;
+		#size-cells = <2>;
+		compatible = "simple-bus";
+		ranges;
+
+		//4cores PLIC2
+		intc: interrupt-controller@6e00000000 {
+			#interrupt-cells = <1>;
+			compatible = "riscv,plic0";
+			interrupt-controller;
+			interrupts-extended = <
+				&cpu0_intc  0xffffffff &cpu0_intc  9
+				&cpu1_intc  0xffffffff &cpu1_intc  9
+				&cpu2_intc  0xffffffff &cpu2_intc  9
+				&cpu3_intc  0xffffffff &cpu3_intc  9
+				>;
+			reg = <0x0000006e 0x00000000 0x00000000 0x10000000>;
+			reg-names = "control";
+			riscv,max-priority = <7>;
+			riscv,ndev = <179>;
+		};
+
+		dummy_apb: apb-clock {
+			compatible = "fixed-clock";
+			clock-frequency = <250000000>;
+			clock-output-names = "dummy_apb";
+			#clock-cells = <0>;
+		};
+
+		dummy_ahb: ahb-clock {
+			compatible = "fixed-clock";
+			clock-frequency = <250000000>;
+			clock-output-names = "dummy_ahb";
+			#clock-cells = <0>;
+		};
+
+		dummy_axi: axi-clock {
+			compatible = "fixed-clock";
+			clock-frequency = <25000000>;
+			clock-output-names = "dummy_axi";
+			#clock-cells = <0>;
+		};
+
+		uart0: serial@7030000000 {
+			compatible = "snps,dw-apb-uart";
+			reg = <0x00000070 0x30000000 0x00000000 0x00001000>;
+			interrupt-parent = <&intc>;
+			interrupts = <73>;
+			clock-frequency = <153600>;
+			clock-names = "baudclk";
+			reg-shift = <2>;
+			reg-io-width = <4>;
+		};
+	};
+
+	aliases {
+		serial0 = &uart0;
+	};
+
+	chosen {
+		bootargs = "console=ttyS0,9600 earlycon rdinit=/sbin/init root=/dev/ram0 rw initrd=0x30000000,32M retain_initrd rdmem=0x80000000,2040M";
+		stdout-path = "serial0";
+	};
+};
