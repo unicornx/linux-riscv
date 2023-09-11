@@ -20068,6 +20068,7 @@ M:	Xiaoguang Xing <xiaoguang.xing@sophgo.com>
 M:	Chao Wei <chao.wei@sophgo.com>
 S:	Maintained
 F:	Documentation/devicetree/bindings/riscv/sophgo.yaml
+F:	arch/riscv/boot/dts/sophgo/
 
 SOUND
 M:	Jaroslav Kysela <perex@perex.cz>
