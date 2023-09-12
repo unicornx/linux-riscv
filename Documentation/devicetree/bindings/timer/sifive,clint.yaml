@@ -40,6 +40,14 @@ properties:
               - thead,th1520-clint
           - const: thead,c900-clint
       - items:
+          - enum:
+              - sophgo,sg2042-clint-mtimer
+          - const: thead,c900-clint-mtimer
+      - items:
+          - enum:
+              - sophgo,sg2042-clint-mswi
+          - const: thead,c900-clint-mswi
+      - items:
           - const: sifive,clint0
           - const: riscv,clint0
         deprecated: true
@@ -73,5 +81,23 @@ examples:
                             <&cpu3intc 3>, <&cpu3intc 7>,
                             <&cpu4intc 3>, <&cpu4intc 7>;
        reg = <0x2000000 0x10000>;
+    };
+  - |
+    clint-mtimer@ac010000 {
+      compatible = "sophgo,sg2042-clint-mtimer", "thead,c900-clint-mtimer";
+      interrupts-extended = <&cpu1intc 7>,
+                            <&cpu2intc 7>,
+                            <&cpu3intc 7>,
+                            <&cpu4intc 7>;
+      reg = <0xac010000 0x00007ff8>;
+    };
+  - |
+    clint-mswi@94000000 {
+      compatible = "sophgo,sg2042-clint-mswi", "thead,c900-clint-mswi";
+      interrupts-extended = <&cpu1intc 3>,
+                            <&cpu2intc 3>,
+                            <&cpu3intc 3>,
+                            <&cpu4intc 3>;
+      reg = <0x94000000 0x00004000>;
     };
 ...
