@@ -29,7 +29,11 @@ unsigned long mango_clk_divider_recalc_rate(struct clk_hw *hw,
 	const __be32 *cur;
 	struct clk *clk;
 
-	node = of_find_node_by_name(NULL, "default_rates");
+	/*
+	 * NOTE: default value of socket0 and socket1 are same,
+	 * so we just use socket0_default_rates.
+	 */
+	node = of_find_node_by_name(NULL, "socket0_default_rates");
 
 	of_property_for_each_u32 (node, "clock-rates", prop, cur, rate) {
 		if (rate) {
@@ -83,7 +87,11 @@ unsigned long mango_clk_pll_recalc_rate(struct clk_hw *hw,
 	struct property *prop;
 	const __be32 *cur;
 
-	node = of_find_node_by_name(NULL, "default_rates");
+	/*
+	 * NOTE: default value of socket0 and socket1 are same,
+	 * so we just use socket0_default_rates.
+	 */
+	node = of_find_node_by_name(NULL, "socket0_default_rates");
 
 	of_property_for_each_u32 (node, "clock-rates", prop, cur, rate) {
 		if (rate) {
