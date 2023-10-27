@@ -1298,21 +1298,6 @@ static const struct of_device_id mango_clk_match_ids_tables[] = {
 	{
 		.compatible = "mango, clk-default-rates",
 	},
-	{
-		.compatible = "mango, dm-pll-clock",
-		.data = &pll_clk_tables,
-	},
-	{
-		.compatible = "mango, dm-pll-child-clock",
-		.data = div_clk_tables,
-	},
-	{
-		.compatible = "mango, dm-pll-mux-clock",
-		.data = mux_clk_tables,
-	},
-	{
-		.compatible = "mango, dm-clk-default-rates",
-	},
 	{}
 };
 
@@ -1359,8 +1344,7 @@ static void __init mango_clk_init(struct device_node *node)
 	base = of_iomap(np_top, 0);
 
 	spin_lock_init(&clk_data->lock);
-	if (of_device_is_compatible(node, "mango, pll-clock") ||
-	    of_device_is_compatible(node, "mango, dm-pll-clock")) {
+	if (of_device_is_compatible(node, "mango, pll-clock")) {
 		if (!dev_data->pll_clks_num) {
 			ret = -EINVAL;
 			goto no_match_data;
@@ -1379,8 +1363,7 @@ static void __init mango_clk_init(struct device_node *node)
 		ret = mango_register_pll_clks(node, clk_data, clk_name);
 	}
 
-	if (of_device_is_compatible(node, "mango, pll-child-clock") ||
-	    of_device_is_compatible(node, "mango, dm-pll-child-clock")) {
+	if (of_device_is_compatible(node, "mango, pll-child-clock")) {
 		ret = of_property_read_u32(node, "id", &id);
 		if (ret) {
 			pr_err("not assigned id for %s\n", node->full_name);
@@ -1401,8 +1384,7 @@ static void __init mango_clk_init(struct device_node *node)
 		ret = mango_register_div_clks(node, clk_data);
 	}
 
-	if (of_device_is_compatible(node, "mango, pll-mux-clock") ||
-	    of_device_is_compatible(node, "mango, dm-pll-mux-clock")) {
+	if (of_device_is_compatible(node, "mango, pll-mux-clock")) {
 		ret = of_property_read_u32(node, "id", &id);
 		if (ret) {
 			pr_err("not assigned id for %s\n", node->full_name);
@@ -1441,7 +1423,3 @@ CLK_OF_DECLARE(mango_clk_pll, "mango, pll-clock", mango_clk_init);
 CLK_OF_DECLARE(mango_clk_pll_child, "mango, pll-child-clock", mango_clk_init);
 CLK_OF_DECLARE(mango_clk_pll_mux, "mango, pll-mux-clock", mango_clk_init);
 CLK_OF_DECLARE(mango_clk_default_rate, "mango, clk-default-rates", mango_clk_init);
-CLK_OF_DECLARE(dm_mango_clk_pll, "mango, dm-pll-clock", mango_clk_init);
-CLK_OF_DECLARE(dm_mango_clk_pll_child, "mango, dm-pll-child-clock", mango_clk_init);
-CLK_OF_DECLARE(dm_mango_clk_pll_mux, "mango, dm-pll-mux-clock", mango_clk_init);
-CLK_OF_DECLARE(dm_mango_clk_default_rate, "mango, dm-clk-default-rates", mango_clk_init);
