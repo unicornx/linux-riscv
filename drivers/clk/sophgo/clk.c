@@ -98,12 +98,6 @@ unsigned long mango_clk_divider_recalc_rate(struct clk_hw *hw,
 	val = readl(divider->reg) >> divider->shift;
 	val &= div_mask(divider->width);
 
-#ifdef CONFIG_ARCH_BM1880
-	/* if select divide factor from initial value */
-	if (!(readl(divider->reg) & BIT(3)))
-		val = divider->initial_val;
-#endif
-
 	return divider_recalc_rate(hw, parent_rate, val, divider->table,
 				   divider->flags, divider->width);
 }
