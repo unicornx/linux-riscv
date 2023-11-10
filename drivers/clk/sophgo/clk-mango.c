@@ -13,684 +13,562 @@
 
 #include "clk.h"
 
-/* fixed clocks */
-struct mango_pll_clock mango_root_pll_clks[] = {
-	{
-		.id = FPLL_CLK,
-		.name = "fpll_clock",
-		.parent_name = "cgi",
-		.flags = CLK_GET_RATE_NOCACHE | CLK_GET_ACCURACY_NOCACHE,
-		.ini_flags = MANGO_CLK_RO,
-	}, {
-		.id = DPLL0_CLK,
-		.name = "dpll0_clock",
-		.parent_name = "cgi",
-		.flags = CLK_GET_RATE_NOCACHE | CLK_GET_ACCURACY_NOCACHE,
-		.ini_flags = MANGO_CLK_RO,
-		.status_offset = 0xc0,
-		.enable_offset = 0xc4,
-	}, {
-		.id = DPLL1_CLK,
-		.name = "dpll1_clock",
-		.parent_name = "cgi",
-		.flags = CLK_GET_RATE_NOCACHE | CLK_GET_ACCURACY_NOCACHE,
-		.ini_flags = MANGO_CLK_RO,
-		.status_offset = 0xc0,
-		.enable_offset = 0xc4,
-	}, {
-		.id = MPLL_CLK,
-		.name = "mpll_clock",
-		.parent_name = "cgi",
-		.flags = CLK_GET_RATE_NOCACHE | CLK_GET_ACCURACY_NOCACHE,
-		.status_offset = 0xc0,
-		.enable_offset = 0xc4,
-	},{
-		.id = FPLL_CLK,
-		.name = "s1_fpll_clock",
-		.parent_name = "s1_cgi",
-		.flags = CLK_GET_RATE_NOCACHE | CLK_GET_ACCURACY_NOCACHE,
-		.ini_flags = MANGO_CLK_RO,
-	}, {
-		.id = DPLL0_CLK,
-		.name = "s1_dpll0_clock",
-		.parent_name = "s1_cgi",
-		.flags = CLK_GET_RATE_NOCACHE | CLK_GET_ACCURACY_NOCACHE,
-		.ini_flags = MANGO_CLK_RO,
-		.status_offset = 0xc0,
-		.enable_offset = 0xc4,
-	}, {
-		.id = DPLL1_CLK,
-		.name = "s1_dpll1_clock",
-		.parent_name = "s1_cgi",
-		.flags = CLK_GET_RATE_NOCACHE | CLK_GET_ACCURACY_NOCACHE,
-		.ini_flags = MANGO_CLK_RO,
-		.status_offset = 0xc0,
-		.enable_offset = 0xc4,
-	}, {
-		.id = MPLL_CLK,
-		.name = "s1_mpll_clock",
-		.parent_name = "s1_cgi",
-		.flags = CLK_GET_RATE_NOCACHE | CLK_GET_ACCURACY_NOCACHE,
-		.status_offset = 0xc0,
-		.enable_offset = 0xc4,
-	}
+#define R_PLL_STAT		0xC0
+#define R_PLL_CLKEN_CONTROL	0xC4
+#define R_MPLL_CONTROL		0xE8
+#define R_FPLL_CONTROL		0xF4
+#define R_DPLL0_CONTROL		0xF8
+#define R_DPLL1_CONTROL		0xFC
+
+#define R_CLKENREG0		0x2000
+#define R_CLKENREG1		0x2004
+#define R_CLKSELREG0		0x2020
+#define R_CLKDIVREG0		0x2040
+#define R_CLKDIVREG1		0x2044
+#define R_CLKDIVREG2		0x2048
+#define R_CLKDIVREG3		0x204C
+#define R_CLKDIVREG4		0x2050
+#define R_CLKDIVREG5		0x2054
+#define R_CLKDIVREG6		0x2058
+#define R_CLKDIVREG7		0x205C
+#define R_CLKDIVREG8		0x2060
+#define R_CLKDIVREG9		0x2064
+#define R_CLKDIVREG10		0x2068
+#define R_CLKDIVREG11		0x206C
+#define R_CLKDIVREG12		0x2070
+#define R_CLKDIVREG13		0x2074
+#define R_CLKDIVREG14		0x2078
+#define R_CLKDIVREG15		0x207C
+#define R_CLKDIVREG16		0x2080
+#define R_CLKDIVREG17		0x2084
+#define R_CLKDIVREG18		0x2088
+#define R_CLKDIVREG19		0x208C
+#define R_CLKDIVREG20		0x2090
+#define R_CLKDIVREG21		0x2094
+#define R_CLKDIVREG22		0x2098
+#define R_CLKDIVREG23		0x209C
+#define R_CLKDIVREG24		0x20A0
+#define R_CLKDIVREG25		0x20A4
+#define R_CLKDIVREG26		0x20A8
+#define R_CLKDIVREG27		0x20AC
+#define R_CLKDIVREG28		0x20B0
+#define R_CLKDIVREG29		0x20B4
+#define R_CLKDIVREG30		0x20B8
+
+#define R_RP_RXU_CLK_ENABLE	0x0368
+#define R_MP0_STATUS_REG	0x0380
+#define R_MP0_CONTROL_REG	0x0384
+#define R_MP1_STATUS_REG	0x0388
+#define R_MP1_CONTROL_REG	0x038C
+#define R_MP2_STATUS_REG	0x0390
+#define R_MP2_CONTROL_REG	0x0394
+#define R_MP3_STATUS_REG	0x0398
+#define R_MP3_CONTROL_REG	0x039C
+#define R_MP4_STATUS_REG	0x03A0
+#define R_MP4_CONTROL_REG	0x03A4
+#define R_MP5_STATUS_REG	0x03A8
+#define R_MP5_CONTROL_REG	0x03AC
+#define R_MP6_STATUS_REG	0x03B0
+#define R_MP6_CONTROL_REG	0x03B4
+#define R_MP7_STATUS_REG	0x03B8
+#define R_MP7_CONTROL_REG	0x03BC
+#define R_MP8_STATUS_REG	0x03C0
+#define R_MP8_CONTROL_REG	0x03C4
+#define R_MP9_STATUS_REG	0x03C8
+#define R_MP9_CONTROL_REG	0x03CC
+#define R_MP10_STATUS_REG	0x03D0
+#define R_MP10_CONTROL_REG	0x03D4
+#define R_MP11_STATUS_REG	0x03D8
+#define R_MP11_CONTROL_REG	0x03DC
+#define R_MP12_STATUS_REG	0x03E0
+#define R_MP12_CONTROL_REG	0x03E4
+#define R_MP13_STATUS_REG	0x03E8
+#define R_MP13_CONTROL_REG	0x03EC
+#define R_MP14_STATUS_REG	0x03F0
+#define R_MP14_CONTROL_REG	0x03F4
+#define R_MP15_STATUS_REG	0x03F8
+#define R_MP15_CONTROL_REG	0x03FC
+
+extern unsigned long mango_clk_divider_recalc_rate(
+	struct clk_hw *hw,
+	unsigned long parent_rate);
+extern long mango_clk_divider_round_rate(
+	struct clk_hw *hw,
+	unsigned long rate,
+	unsigned long *prate);
+extern int mango_clk_divider_set_rate(
+	struct clk_hw *hw,
+	unsigned long rate,
+	unsigned long parent_rate);
+extern unsigned long mango_clk_pll_recalc_rate(
+	struct clk_hw *hw,
+	unsigned long parent_rate);
+extern long mango_clk_pll_round_rate(
+	struct clk_hw *hw,
+	unsigned long req_rate,
+	unsigned long *prate);
+extern int mango_clk_pll_determine_rate(
+	struct clk_hw *hw,
+	struct clk_rate_request *req);
+extern int mango_clk_pll_set_rate(
+	struct clk_hw *hw,
+	unsigned long rate,
+	unsigned long parent_rate);
+
+const struct clk_ops mango_clk_divider_ops = {
+	.recalc_rate = mango_clk_divider_recalc_rate,
+	.round_rate = mango_clk_divider_round_rate,
+	.set_rate = mango_clk_divider_set_rate,
 };
 
+const struct clk_ops mango_clk_divider_ro_ops = {
+	.recalc_rate = mango_clk_divider_recalc_rate,
+	.round_rate = mango_clk_divider_round_rate,
+};
+
+const struct clk_ops mango_clk_pll_ops = {
+	.recalc_rate = mango_clk_pll_recalc_rate,
+	.round_rate = mango_clk_pll_round_rate,
+	.determine_rate = mango_clk_pll_determine_rate,
+	.set_rate = mango_clk_pll_set_rate,
+};
+
+const struct clk_ops mango_clk_pll_ro_ops = {
+	.recalc_rate = mango_clk_pll_recalc_rate,
+	.round_rate = mango_clk_pll_round_rate,
+};
+
+#define MANGO_PLL(_id, _name, _parent_name, _r_stat, _r_enable, _r_ctrl, _shift) \
+	{								\
+		.hw.init = CLK_HW_INIT_PARENTS(				\
+				_name,					\
+				(const char *[]){_parent_name},		\
+				&mango_clk_pll_ops,			\
+				CLK_GET_RATE_NOCACHE | CLK_GET_ACCURACY_NOCACHE),\
+		.id = _id,						\
+		.name = _name,						\
+		.offset_ctrl = _r_ctrl,					\
+		.offset_status = _r_stat,				\
+		.offset_enable = _r_enable,				\
+		.shift_status_lock = 8 + _shift,			\
+		.shift_status_updating = _shift,			\
+		.shift_enable = _shift,					\
+	}
+
+#define MANGO_PLL_RO(_id, _name, _parent_name, _r_stat, _r_enable, _r_ctrl, _shift) \
+	{								\
+		.hw.init = CLK_HW_INIT_PARENTS(				\
+				_name,					\
+				(const char *[]){_parent_name},		\
+				&mango_clk_pll_ro_ops,			\
+				CLK_GET_RATE_NOCACHE | CLK_GET_ACCURACY_NOCACHE),\
+		.id = _id,						\
+		.name = _name,						\
+		.offset_ctrl = _r_ctrl,					\
+		.offset_status = _r_stat,				\
+		.offset_enable = _r_enable,				\
+		.shift_status_lock = 8 + _shift,			\
+		.shift_status_updating = _shift,			\
+		.shift_enable = _shift,					\
+	}
+
+struct mango_pll_clock mango_pll_clks[] = {
+	MANGO_PLL_RO(FPLL_CLK, "fpll_clock", "cgi",
+		R_PLL_STAT, R_PLL_CLKEN_CONTROL, R_FPLL_CONTROL, 3),
+	MANGO_PLL_RO(DPLL0_CLK, "dpll0_clock", "cgi",
+		R_PLL_STAT, R_PLL_CLKEN_CONTROL, R_DPLL0_CONTROL, 4),
+	MANGO_PLL_RO(DPLL1_CLK, "dpll1_clock", "cgi",
+		R_PLL_STAT, R_PLL_CLKEN_CONTROL, R_DPLL1_CONTROL, 5),
+	MANGO_PLL(MPLL_CLK, "mpll_clock", "cgi",
+		R_PLL_STAT, R_PLL_CLKEN_CONTROL, R_MPLL_CONTROL, 0),
+};
+
+#define MANGO_DIV(_id, _name, _parent_name, 				\
+		  _r_ctrl, _shift, _width,				\
+		  _div_flag, _init_val) {				\
+		.hw.init = CLK_HW_INIT_PARENTS(				\
+				_name,					\
+				(const char *[]){_parent_name},		\
+				&mango_clk_divider_ops,			\
+				0),					\
+		.id = _id,						\
+		.name = _name,						\
+		.offset_ctrl = _r_ctrl,					\
+		.shift = _shift,					\
+		.width = _width,					\
+		.div_flags = _div_flag,					\
+		.initial_val = _init_val,				\
+		.table = NULL,						\
+	}
+
+#define MANGO_DIV_RO(_id, _name, _parent_name, 				\
+		  _r_ctrl, _shift, _width,				\
+		  _div_flag, _init_val) {				\
+		.hw.init = CLK_HW_INIT_PARENTS(				\
+				_name,					\
+				(const char *[]){_parent_name},		\
+				&mango_clk_divider_ro_ops,		\
+				0),					\
+		.id = _id,						\
+		.name = _name,						\
+		.offset_ctrl = _r_ctrl,					\
+		.shift = _shift,					\
+		.width = _width,					\
+		.div_flags = _div_flag,					\
+		.initial_val = _init_val,				\
+		.table = NULL,						\
+	}
+
 /* divider clocks */
-static const struct mango_divider_clock s0_div_clks[] = {
-	{ DIV_CLK_MPLL_RP_CPU_NORMAL_0, "clk_div_rp_cpu_normal_0", "clk_gate_rp_cpu_normal_div0",
-		0, 0x2044, 16, 8, CLK_DIVIDER_ONE_BASED |
-			CLK_DIVIDER_ALLOW_ZERO, MANGO_CLK_USE_REG_VAL, },
-	{ DIV_CLK_MPLL_AXI_DDR_0, "clk_div_axi_ddr_0", "clk_gate_axi_ddr_div0",
-		0, 0x20a8, 16, 8, CLK_DIVIDER_ONE_BASED |
-			CLK_DIVIDER_ALLOW_ZERO, MANGO_CLK_USE_REG_VAL, 5},
-	{ DIV_CLK_FPLL_DDR01_1, "clk_div_ddr01_1", "clk_gate_ddr01_div1",
-		0, 0x20b0, 16, 8, CLK_DIVIDER_ONE_BASED |
-			CLK_DIVIDER_ALLOW_ZERO, MANGO_CLK_USE_INIT_VAL, },
-	{ DIV_CLK_FPLL_DDR23_1, "clk_div_ddr23_1", "clk_gate_ddr23_div1",
-		0, 0x20b8, 16, 8, CLK_DIVIDER_ONE_BASED |
-			CLK_DIVIDER_ALLOW_ZERO, MANGO_CLK_USE_INIT_VAL, },
-	{ DIV_CLK_FPLL_RP_CPU_NORMAL_1, "clk_div_rp_cpu_normal_1", "clk_gate_rp_cpu_normal_div1",
-		0, 0x2040, 16, 8, CLK_DIVIDER_ONE_BASED |
-			CLK_DIVIDER_ALLOW_ZERO, MANGO_CLK_USE_REG_VAL, },
-	{ DIV_CLK_FPLL_50M_A53, "clk_div_50m_a53", "fpll_clock",
-		0, 0x2048, 16, 8, CLK_DIVIDER_ONE_BASED |
-			CLK_DIVIDER_ALLOW_ZERO, MANGO_CLK_USE_REG_VAL, },
-	{ DIV_CLK_FPLL_TOP_RP_CMN_DIV2, "clk_div_top_rp_cmn_div2", "clk_mux_rp_cpu_normal",
-		0, 0x204c, 16, 16, CLK_DIVIDER_ONE_BASED |
-			CLK_DIVIDER_ALLOW_ZERO, MANGO_CLK_USE_REG_VAL, },
-	{ DIV_CLK_FPLL_UART_500M, "clk_div_uart_500m", "fpll_clock",
-		0, 0x2050, 16, 7, CLK_DIVIDER_READ_ONLY, MANGO_CLK_USE_REG_VAL, },
-	{ DIV_CLK_FPLL_AHB_LPC, "clk_div_ahb_lpc", "fpll_clock",
-		0, 0x2054, 16, 16, CLK_DIVIDER_ONE_BASED |
-			CLK_DIVIDER_ALLOW_ZERO, MANGO_CLK_USE_REG_VAL, },
-	{ DIV_CLK_FPLL_EFUSE, "clk_div_efuse", "fpll_clock",
-		0, 0x2078, 16, 8, CLK_DIVIDER_ONE_BASED |
-			CLK_DIVIDER_ALLOW_ZERO, MANGO_CLK_USE_REG_VAL, },
-	{ DIV_CLK_FPLL_TX_ETH0, "clk_div_tx_eth0", "fpll_clock",
-		0, 0x2080, 16, 11, CLK_DIVIDER_ONE_BASED |
-			CLK_DIVIDER_ALLOW_ZERO, MANGO_CLK_USE_REG_VAL, },
-	{ DIV_CLK_FPLL_PTP_REF_I_ETH0, "clk_div_ptp_ref_i_eth0", "fpll_clock",
-		0, 0x2084, 16, 8, CLK_DIVIDER_ONE_BASED |
-			CLK_DIVIDER_ALLOW_ZERO, MANGO_CLK_USE_REG_VAL, },
-	{ DIV_CLK_FPLL_REF_ETH0, "clk_div_ref_eth0", "fpll_clock",
-		0, 0x2088, 16, 8, CLK_DIVIDER_ONE_BASED |
-			CLK_DIVIDER_ALLOW_ZERO, MANGO_CLK_USE_REG_VAL, },
-	{ DIV_CLK_FPLL_EMMC, "clk_div_emmc", "fpll_clock",
-		0, 0x208c, 16, 8, CLK_DIVIDER_ONE_BASED |
-			CLK_DIVIDER_ALLOW_ZERO, MANGO_CLK_USE_REG_VAL, },
-	{ DIV_CLK_FPLL_SD, "clk_div_sd", "fpll_clock",
-		0, 0x2094, 16, 8, CLK_DIVIDER_ONE_BASED |
-			CLK_DIVIDER_ALLOW_ZERO, MANGO_CLK_USE_REG_VAL, },
-	{ DIV_CLK_FPLL_TOP_AXI0, "clk_div_top_axi0", "fpll_clock",
-		0, 0x209c, 16, 5, CLK_DIVIDER_ONE_BASED |
-			CLK_DIVIDER_ALLOW_ZERO, MANGO_CLK_USE_REG_VAL, },
-	{ DIV_CLK_FPLL_TOP_AXI_HSPERI, "clk_div_top_axi_hsperi", "fpll_clock",
-		0, 0x20a0, 16, 5, CLK_DIVIDER_ONE_BASED |
-			CLK_DIVIDER_ALLOW_ZERO, MANGO_CLK_USE_REG_VAL, },
-	{ DIV_CLK_FPLL_AXI_DDR_1, "clk_div_axi_ddr_1", "clk_gate_axi_ddr_div1",
-		0, 0x20a4, 16, 8, CLK_DIVIDER_ONE_BASED |
-			CLK_DIVIDER_ALLOW_ZERO, MANGO_CLK_USE_REG_VAL, 5},
-	{ DIV_CLK_FPLL_DIV_TIMER1, "clk_div_timer1", "clk_div_50m_a53",
-		0, 0x2058, 16, 8, CLK_DIVIDER_ONE_BASED |
-			CLK_DIVIDER_ALLOW_ZERO, MANGO_CLK_USE_REG_VAL, },
-	{ DIV_CLK_FPLL_DIV_TIMER2, "clk_div_timer2", "clk_div_50m_a53",
-		0, 0x205c, 16, 8, CLK_DIVIDER_ONE_BASED |
-			CLK_DIVIDER_ALLOW_ZERO, MANGO_CLK_USE_REG_VAL, },
-	{ DIV_CLK_FPLL_DIV_TIMER3, "clk_div_timer3", "clk_div_50m_a53",
-		0, 0x2060, 16, 8, CLK_DIVIDER_ONE_BASED |
-			CLK_DIVIDER_ALLOW_ZERO, MANGO_CLK_USE_REG_VAL, },
-	{ DIV_CLK_FPLL_DIV_TIMER4, "clk_div_timer4", "clk_div_50m_a53",
-		0, 0x2064, 16, 8, CLK_DIVIDER_ONE_BASED |
-			CLK_DIVIDER_ALLOW_ZERO, MANGO_CLK_USE_REG_VAL, },
-	{ DIV_CLK_FPLL_DIV_TIMER5, "clk_div_timer5", "clk_div_50m_a53",
-		0, 0x2068, 16, 8, CLK_DIVIDER_ONE_BASED |
-			CLK_DIVIDER_ALLOW_ZERO, MANGO_CLK_USE_REG_VAL, },
-	{ DIV_CLK_FPLL_DIV_TIMER6, "clk_div_timer6", "clk_div_50m_a53",
-		0, 0x206c, 16, 8, CLK_DIVIDER_ONE_BASED |
-			CLK_DIVIDER_ALLOW_ZERO, MANGO_CLK_USE_REG_VAL, },
-	{ DIV_CLK_FPLL_DIV_TIMER7, "clk_div_timer7", "clk_div_50m_a53",
-		0, 0x2070, 16, 8, CLK_DIVIDER_ONE_BASED |
-			CLK_DIVIDER_ALLOW_ZERO, MANGO_CLK_USE_REG_VAL, },
-	{ DIV_CLK_FPLL_DIV_TIMER8, "clk_div_timer8", "clk_div_50m_a53",
-		0, 0x2074, 16, 8, CLK_DIVIDER_ONE_BASED |
-			CLK_DIVIDER_ALLOW_ZERO, MANGO_CLK_USE_REG_VAL, },
-	{ DIV_CLK_FPLL_100K_EMMC, "clk_div_100k_emmc", "clk_div_top_axi0",
-		0, 0x2090, 16, 8, CLK_DIVIDER_ONE_BASED |
-			CLK_DIVIDER_ALLOW_ZERO, MANGO_CLK_USE_REG_VAL, },
-	{ DIV_CLK_FPLL_100K_SD, "clk_div_100k_sd", "clk_div_top_axi0",
-		0, 0x2098, 16, 8, CLK_DIVIDER_ONE_BASED |
-			CLK_DIVIDER_ALLOW_ZERO, MANGO_CLK_USE_REG_VAL, },
-	{ DIV_CLK_FPLL_GPIO_DB, "clk_div_gpio_db", "clk_div_top_axi0",
-		0, 0x207c, 16, 8, CLK_DIVIDER_ONE_BASED |
-			CLK_DIVIDER_ALLOW_ZERO, MANGO_CLK_USE_REG_VAL, },
-	{ DIV_CLK_DPLL0_DDR01_0, "clk_div_ddr01_0", "clk_gate_ddr01_div0",
-		0, 0x20ac, 16, 8, CLK_DIVIDER_ONE_BASED |
-			CLK_DIVIDER_ALLOW_ZERO, MANGO_CLK_USE_INIT_VAL, },
-	{ DIV_CLK_DPLL1_DDR23_0, "clk_div_ddr23_0", "clk_gate_ddr23_div0",
-		0, 0x20b4, 16, 8, CLK_DIVIDER_ONE_BASED |
-			CLK_DIVIDER_ALLOW_ZERO, MANGO_CLK_USE_INIT_VAL, },
+#define DEF_DIVFLAG CLK_DIVIDER_ONE_BASED | CLK_DIVIDER_ALLOW_ZERO
+static struct mango_divider_clock mango_div_clks[] = {
+	MANGO_DIV(DIV_CLK_MPLL_RP_CPU_NORMAL_0,
+		"clk_div_rp_cpu_normal_0", "clk_gate_rp_cpu_normal_div0",
+		R_CLKDIVREG1, 16, 5, DEF_DIVFLAG, 0),
+	MANGO_DIV(DIV_CLK_MPLL_AXI_DDR_0,
+		"clk_div_axi_ddr_0", "clk_gate_axi_ddr_div0",
+		R_CLKDIVREG26, 16, 5, DEF_DIVFLAG,5),
+	MANGO_DIV_RO(DIV_CLK_FPLL_DDR01_1,
+		"clk_div_ddr01_1", "clk_gate_ddr01_div1",
+		R_CLKDIVREG28, 16, 5,
+		DEF_DIVFLAG | CLK_DIVIDER_READ_ONLY, -1),
+	MANGO_DIV_RO(DIV_CLK_FPLL_DDR23_1,
+		"clk_div_ddr23_1", "clk_gate_ddr23_div1",
+		R_CLKDIVREG30, 16, 5,
+		DEF_DIVFLAG | CLK_DIVIDER_READ_ONLY, -1),
+	MANGO_DIV(DIV_CLK_FPLL_RP_CPU_NORMAL_1,
+		"clk_div_rp_cpu_normal_1", "clk_gate_rp_cpu_normal_div1",
+		R_CLKDIVREG0, 16, 5, DEF_DIVFLAG, 0),
+	MANGO_DIV(DIV_CLK_FPLL_50M_A53, "clk_div_50m_a53", "fpll_clock",
+		R_CLKDIVREG2, 16, 8, DEF_DIVFLAG, 0),
+	MANGO_DIV(DIV_CLK_FPLL_TOP_RP_CMN_DIV2,
+		"clk_div_top_rp_cmn_div2", "clk_mux_rp_cpu_normal",
+		R_CLKDIVREG3, 16, 16, DEF_DIVFLAG, 0),
+	MANGO_DIV_RO(DIV_CLK_FPLL_UART_500M, "clk_div_uart_500m", "fpll_clock",
+		R_CLKDIVREG4, 16, 7,
+		CLK_DIVIDER_READ_ONLY, 0),
+	MANGO_DIV(DIV_CLK_FPLL_AHB_LPC, "clk_div_ahb_lpc", "fpll_clock",
+		R_CLKDIVREG5, 16, 16, DEF_DIVFLAG, 0),
+	MANGO_DIV(DIV_CLK_FPLL_EFUSE, "clk_div_efuse", "fpll_clock",
+		R_CLKDIVREG14, 16, 7, DEF_DIVFLAG, 0),
+	MANGO_DIV(DIV_CLK_FPLL_TX_ETH0, "clk_div_tx_eth0", "fpll_clock",
+		R_CLKDIVREG16, 16, 11, DEF_DIVFLAG, 0),
+	MANGO_DIV(DIV_CLK_FPLL_PTP_REF_I_ETH0,
+		"clk_div_ptp_ref_i_eth0", "fpll_clock",
+		R_CLKDIVREG17, 16, 8, DEF_DIVFLAG, 0),
+	MANGO_DIV(DIV_CLK_FPLL_REF_ETH0, "clk_div_ref_eth0", "fpll_clock",
+		R_CLKDIVREG18, 16, 8, DEF_DIVFLAG, 0),
+	MANGO_DIV(DIV_CLK_FPLL_EMMC, "clk_div_emmc", "fpll_clock",
+		R_CLKDIVREG19, 16, 5, DEF_DIVFLAG, 0),
+	MANGO_DIV(DIV_CLK_FPLL_SD, "clk_div_sd", "fpll_clock",
+		R_CLKDIVREG21, 16, 5, DEF_DIVFLAG, 0),
+	MANGO_DIV(DIV_CLK_FPLL_TOP_AXI0, "clk_div_top_axi0", "fpll_clock",
+		R_CLKDIVREG23, 16, 5, DEF_DIVFLAG, 0),
+	MANGO_DIV(DIV_CLK_FPLL_TOP_AXI_HSPERI,
+		"clk_div_top_axi_hsperi", "fpll_clock",
+		R_CLKDIVREG24, 16, 5, DEF_DIVFLAG, 0),
+	MANGO_DIV(DIV_CLK_FPLL_AXI_DDR_1,
+		"clk_div_axi_ddr_1", "clk_gate_axi_ddr_div1",
+		R_CLKDIVREG25, 16, 5, DEF_DIVFLAG, 5),
+	MANGO_DIV(DIV_CLK_FPLL_DIV_TIMER1, "clk_div_timer1", "clk_div_50m_a53",
+		R_CLKDIVREG6, 16, 16, DEF_DIVFLAG, 0),
+	MANGO_DIV(DIV_CLK_FPLL_DIV_TIMER2, "clk_div_timer2", "clk_div_50m_a53",
+		R_CLKDIVREG7, 16, 16, DEF_DIVFLAG, 0),
+	MANGO_DIV(DIV_CLK_FPLL_DIV_TIMER3, "clk_div_timer3", "clk_div_50m_a53",
+		R_CLKDIVREG8, 16, 16, DEF_DIVFLAG, 0),
+	MANGO_DIV(DIV_CLK_FPLL_DIV_TIMER4, "clk_div_timer4", "clk_div_50m_a53",
+		R_CLKDIVREG9, 16, 16, DEF_DIVFLAG, 0),
+	MANGO_DIV(DIV_CLK_FPLL_DIV_TIMER5, "clk_div_timer5", "clk_div_50m_a53",
+		R_CLKDIVREG10, 16, 16, DEF_DIVFLAG, 0),
+	MANGO_DIV(DIV_CLK_FPLL_DIV_TIMER6, "clk_div_timer6", "clk_div_50m_a53",
+		R_CLKDIVREG11, 16, 16, DEF_DIVFLAG, 0),
+	MANGO_DIV(DIV_CLK_FPLL_DIV_TIMER7, "clk_div_timer7", "clk_div_50m_a53",
+		R_CLKDIVREG12, 16, 16, DEF_DIVFLAG, 0),
+	MANGO_DIV(DIV_CLK_FPLL_DIV_TIMER8, "clk_div_timer8", "clk_div_50m_a53",
+		R_CLKDIVREG13, 16, 16, DEF_DIVFLAG, 0),
+	MANGO_DIV(DIV_CLK_FPLL_100K_EMMC, "clk_div_100k_emmc", "clk_div_top_axi0",
+		R_CLKDIVREG20, 16, 16, DEF_DIVFLAG, 0),
+	MANGO_DIV(DIV_CLK_FPLL_100K_SD, "clk_div_100k_sd", "clk_div_top_axi0",
+		R_CLKDIVREG22, 16, 16, DEF_DIVFLAG, 0),
+	MANGO_DIV(DIV_CLK_FPLL_GPIO_DB, "clk_div_gpio_db", "clk_div_top_axi0",
+		R_CLKDIVREG15, 16, 16, DEF_DIVFLAG, 0),
+	MANGO_DIV_RO(DIV_CLK_DPLL0_DDR01_0, "clk_div_ddr01_0", "clk_gate_ddr01_div0",
+		R_CLKDIVREG27, 16, 5,
+		DEF_DIVFLAG | CLK_DIVIDER_READ_ONLY, -1),
+	MANGO_DIV_RO(DIV_CLK_DPLL1_DDR23_0, "clk_div_ddr23_0", "clk_gate_ddr23_div0",
+		R_CLKDIVREG29, 16, 5,
+		DEF_DIVFLAG | CLK_DIVIDER_READ_ONLY, -1),
 };
 
 /* gate clocks */
-static const struct mango_gate_clock s0_gate_clks[] = {
-	{ GATE_CLK_RP_CPU_NORMAL_DIV0, "clk_gate_rp_cpu_normal_div1", "mpll_clock",
-		CLK_SET_RATE_PARENT | CLK_IGNORE_UNUSED | CLK_IS_CRITICAL, 0x2000, 0, 0 },
-	{ GATE_CLK_AXI_DDR_DIV0, "clk_gate_axi_ddr_div1", "mpll_clock",
-		CLK_SET_RATE_PARENT | CLK_IGNORE_UNUSED | CLK_IS_CRITICAL, 0x2004, 13, 0 },
-	{ GATE_CLK_DDR01_DIV0, "clk_gate_ddr01_div0", "fpll_clock",
-		CLK_IGNORE_UNUSED | CLK_IS_CRITICAL, 0x2004, 14, 0 },
-	{ GATE_CLK_DDR23_DIV0, "clk_gate_ddr23_div0", "fpll_clock",
-		CLK_IGNORE_UNUSED | CLK_IS_CRITICAL, 0x2004, 15, 0 },
-	{ GATE_CLK_RP_CPU_NORMAL_DIV1, "clk_gate_rp_cpu_normal_div0", "fpll_clock",
-		CLK_IGNORE_UNUSED | CLK_IS_CRITICAL, 0x2000, 0, 0 },
-	{ GATE_CLK_AXI_DDR_DIV1, "clk_gate_axi_ddr_div0", "fpll_clock",
-		CLK_IGNORE_UNUSED | CLK_IS_CRITICAL, 0x2004, 13, 0 },
-	{ GATE_CLK_DDR01_DIV1, "clk_gate_ddr01_div1", "dpll0_clock",
-		CLK_SET_RATE_PARENT | CLK_IGNORE_UNUSED, 0x2004, 14, 0 },
-	{ GATE_CLK_DDR23_DIV1, "clk_gate_ddr23_div1", "dpll1_clock",
-		CLK_SET_RATE_PARENT | CLK_IGNORE_UNUSED, 0x2004, 15, 0 },
-	{ GATE_CLK_A53_50M, "clk_gate_a53_50m", "clk_div_50m_a53",
-		CLK_SET_RATE_PARENT | CLK_IGNORE_UNUSED, 0x2000, 1, 0 },
-	{ GATE_CLK_TOP_RP_CMN_DIV2, "clk_gate_top_rp_cmn_div2", "clk_gate_rp_cpu_normal",
-		CLK_SET_RATE_PARENT | CLK_IGNORE_UNUSED, 0x2000, 2, 0 },
-	{ GATE_CLK_AXI_PCIE0, "clk_gate_axi_pcie0", "clk_gate_rp_cpu_normal",
-		CLK_SET_RATE_PARENT | CLK_IGNORE_UNUSED, 0x2004, 8, 0 },
-	{ GATE_CLK_AXI_PCIE1, "clk_gate_axi_pcie1", "clk_gate_rp_cpu_normal",
-		CLK_SET_RATE_PARENT | CLK_IGNORE_UNUSED, 0x2004, 9, 0 },
-	{ GATE_CLK_HSDMA, "clk_gate_hsdma", "clk_gate_top_rp_cmn_div2",
-		CLK_SET_RATE_PARENT, 0x2004, 10, 0 },
-	{ GATE_CLK_EMMC_100M, "clk_gate_emmc", "clk_div_emmc",
-		CLK_SET_RATE_PARENT, 0x2004, 3, 0 },
-	{ GATE_CLK_SD_100M, "clk_gate_sd", "clk_div_sd",
-		CLK_SET_RATE_PARENT, 0x2004, 6, 0 },
-	{ GATE_CLK_TX_ETH0, "clk_gate_tx_eth0", "clk_div_tx_eth0",
-		CLK_SET_RATE_PARENT, 0x2000, 30, 0 },
-	{ GATE_CLK_PTP_REF_I_ETH0, "clk_gate_ptp_ref_i_eth0", "clk_div_ptp_ref_i_eth0",
-		CLK_SET_RATE_PARENT, 0x2004, 0, 0 },
-	{ GATE_CLK_REF_ETH0, "clk_gate_ref_eth0", "clk_div_ref_eth0",
-		CLK_SET_RATE_PARENT, 0x2004, 1, 0 },
-	{ GATE_CLK_UART_500M, "clk_gate_uart_500m", "clk_div_uart_500m",
-		CLK_SET_RATE_PARENT | CLK_IGNORE_UNUSED, 0x2000, 4, 0 },
-	{ GATE_CLK_AHB_LPC, "clk_gate_ahb_lpc", "clk_div_ahb_lpc",
-		CLK_SET_RATE_PARENT, 0x2000, 7, 0 },
-	{ GATE_CLK_EFUSE, "clk_gate_efuse", "clk_div_efuse",
-		CLK_SET_RATE_PARENT, 0x2000, 20, 0},
-	{ GATE_CLK_TOP_AXI0, "clk_gate_top_axi0", "clk_div_top_axi0",
-		CLK_SET_RATE_PARENT | CLK_IGNORE_UNUSED | CLK_IS_CRITICAL, 0x2004, 11, 0 },
-	{ GATE_CLK_TOP_AXI_HSPERI, "clk_gate_top_axi_hsperi", "clk_div_top_axi_hsperi",
-		CLK_SET_RATE_PARENT | CLK_IGNORE_UNUSED | CLK_IS_CRITICAL, 0x2004, 12, 0 },
-	{ GATE_CLK_AHB_ROM, "clk_gate_ahb_rom", "clk_gate_top_axi0",
-		0, 0x2000, 8, 0 },
-	{ GATE_CLK_AHB_SF, "clk_gate_ahb_sf", "clk_gate_top_axi0",
-		0, 0x2000, 9, 0 },
-	{ GATE_CLK_AXI_SRAM, "clk_gate_axi_sram", "clk_gate_top_axi0",
-		CLK_IGNORE_UNUSED, 0x2000, 10, 0 },
-	{ GATE_CLK_APB_TIMER, "clk_gate_apb_timer", "clk_gate_top_axi0",
-		CLK_IGNORE_UNUSED, 0x2000, 11, 0 },
-	{ GATE_CLK_APB_EFUSE, "clk_gate_apb_efuse", "clk_gate_top_axi0",
-		0, 0x2000, 21, 0 },
-	{ GATE_CLK_APB_GPIO, "clk_gate_apb_gpio", "clk_gate_top_axi0",
-		0, 0x2000, 22, 0 },
-	{ GATE_CLK_APB_GPIO_INTR, "clk_gate_apb_gpio_intr", "clk_gate_top_axi0",
-		0, 0x2000, 23, 0 },
-	{ GATE_CLK_APB_I2C, "clk_gate_apb_i2c", "clk_gate_top_axi0",
-		0, 0x2000, 26, 0 },
-	{ GATE_CLK_APB_WDT, "clk_gate_apb_wdt", "clk_gate_top_axi0",
-		0, 0x2000, 27, 0 },
-	{ GATE_CLK_APB_PWM, "clk_gate_apb_pwm", "clk_gate_top_axi0",
-		0, 0x2000, 28, 0 },
-	{ GATE_CLK_APB_RTC, "clk_gate_apb_rtc", "clk_gate_top_axi0",
-		0, 0x2000, 29, 0 },
-	{ GATE_CLK_SYSDMA_AXI, "clk_gate_sysdma_axi", "clk_gate_top_axi_hsperi",
-		CLK_SET_RATE_PARENT, 0x2000, 3, 0 },
-	{ GATE_CLK_APB_UART, "clk_gate_apb_uart", "clk_gate_top_axi_hsperi",
-		CLK_SET_RATE_PARENT, 0x2000, 5, 0 },
-	{ GATE_CLK_AXI_DBG_I2C, "clk_gate_axi_dbg_i2c", "clk_gate_top_axi_hsperi",
-		CLK_SET_RATE_PARENT, 0x2000, 6, 0 },
-	{ GATE_CLK_APB_SPI, "clk_gate_apb_spi", "clk_gate_top_axi_hsperi",
-		CLK_SET_RATE_PARENT, 0x2000, 25, 0 },
-	{ GATE_CLK_AXI_ETH0, "clk_gate_axi_eth0", "clk_gate_top_axi_hsperi",
-		CLK_SET_RATE_PARENT, 0x2000, 31, 0 },
-	{ GATE_CLK_AXI_EMMC, "clk_gate_axi_emmc", "clk_gate_top_axi_hsperi",
-		CLK_SET_RATE_PARENT, 0x2004, 2, 0 },
-	{ GATE_CLK_AXI_SD, "clk_gate_axi_sd", "clk_gate_top_axi_hsperi",
-		CLK_SET_RATE_PARENT, 0x2004, 5, 0 },
-	{ GATE_CLK_TIMER1, "clk_gate_timer1", "clk_div_timer1",
-		CLK_SET_RATE_PARENT, 0x2000, 12, 0 },
-	{ GATE_CLK_TIMER2, "clk_gate_timer2", "clk_div_timer2",
-		CLK_SET_RATE_PARENT, 0x2000, 13, 0 },
-	{ GATE_CLK_TIMER3, "clk_gate_timer3", "clk_div_timer3",
-		CLK_SET_RATE_PARENT, 0x2000, 14, 0 },
-	{ GATE_CLK_TIMER4, "clk_gate_timer4", "clk_div_timer4",
-		CLK_SET_RATE_PARENT, 0x2000, 15, 0 },
-	{ GATE_CLK_TIMER5, "clk_gate_timer5", "clk_div_timer5",
-		CLK_SET_RATE_PARENT, 0x2000, 16, 0 },
-	{ GATE_CLK_TIMER6, "clk_gate_timer6", "clk_div_timer6",
-		CLK_SET_RATE_PARENT, 0x2000, 17, 0 },
-	{ GATE_CLK_TIMER7, "clk_gate_timer7", "clk_div_timer7",
-		CLK_SET_RATE_PARENT, 0x2000, 18, 0 },
-	{ GATE_CLK_TIMER8, "clk_gate_timer8", "clk_div_timer8",
-		CLK_SET_RATE_PARENT, 0x2000, 19, 0 },
-	{ GATE_CLK_100K_EMMC, "clk_gate_100k_emmc", "clk_div_100k_emmc",
-		CLK_SET_RATE_PARENT, 0x2004, 4, 0 },
-	{ GATE_CLK_100K_SD, "clk_gate_100k_sd", "clk_div_100k_sd",
-		CLK_SET_RATE_PARENT, 0x2004, 7, 0 },
-	{ GATE_CLK_GPIO_DB, "clk_gate_gpio_db", "clk_div_gpio_db",
-		CLK_SET_RATE_PARENT, 0x2000, 24, 0 },
-	{ GATE_CLK_DDR01, "clk_gate_ddr01", "clk_mux_ddr01",
-		CLK_SET_RATE_PARENT | CLK_IGNORE_UNUSED | CLK_IS_CRITICAL, 0x2004, 14, 0 },
-	{ GATE_CLK_DDR23, "clk_gate_ddr23", "clk_mux_ddr23",
-		CLK_SET_RATE_PARENT | CLK_IGNORE_UNUSED | CLK_IS_CRITICAL, 0x2004, 15, 0 },
-	{ GATE_CLK_RP_CPU_NORMAL, "clk_gate_rp_cpu_normal", "clk_mux_rp_cpu_normal",
-		CLK_SET_RATE_PARENT | CLK_IGNORE_UNUSED | CLK_IS_CRITICAL, 0x2000, 0, 0 },
-	{ GATE_CLK_AXI_DDR, "clk_gate_axi_ddr", "clk_mux_axi_ddr",
-		CLK_SET_RATE_PARENT | CLK_IGNORE_UNUSED | CLK_IS_CRITICAL, 0x2004, 13, 0 },
-	{ GATE_CLK_RXU0, "clk_gate_rxu0", "clk_gate_rp_cpu_normal",
-		0, 0x368, 0, 0 },
-	{ GATE_CLK_RXU1, "clk_gate_rxu1", "clk_gate_rp_cpu_normal",
-		0, 0x368, 1, 0 },
-	{ GATE_CLK_RXU2, "clk_gate_rxu2", "clk_gate_rp_cpu_normal",
-		0, 0x368, 2, 0 },
-	{ GATE_CLK_RXU3, "clk_gate_rxu3", "clk_gate_rp_cpu_normal",
-		0, 0x368, 3, 0 },
-	{ GATE_CLK_RXU4, "clk_gate_rxu4", "clk_gate_rp_cpu_normal",
-		0, 0x368, 4, 0 },
-	{ GATE_CLK_RXU5, "clk_gate_rxu5", "clk_gate_rp_cpu_normal",
-		0, 0x368, 5, 0 },
-	{ GATE_CLK_RXU6, "clk_gate_rxu6", "clk_gate_rp_cpu_normal",
-		0, 0x368, 6, 0 },
-	{ GATE_CLK_RXU7, "clk_gate_rxu7", "clk_gate_rp_cpu_normal",
-		0, 0x368, 7, 0 },
-	{ GATE_CLK_RXU8, "clk_gate_rxu8", "clk_gate_rp_cpu_normal",
-		0, 0x368, 8, 0 },
-	{ GATE_CLK_RXU9, "clk_gate_rxu9", "clk_gate_rp_cpu_normal",
-		0, 0x368, 9, 0 },
-	{ GATE_CLK_RXU10, "clk_gate_rxu10", "clk_gate_rp_cpu_normal",
-		0, 0x368, 10, 0 },
-	{ GATE_CLK_RXU11, "clk_gate_rxu11", "clk_gate_rp_cpu_normal",
-		0, 0x368, 11, 0 },
-	{ GATE_CLK_RXU12, "clk_gate_rxu12", "clk_gate_rp_cpu_normal",
-		0, 0x368, 12, 0 },
-	{ GATE_CLK_RXU13, "clk_gate_rxu13", "clk_gate_rp_cpu_normal",
-		0, 0x368, 13, 0 },
-	{ GATE_CLK_RXU14, "clk_gate_rxu14", "clk_gate_rp_cpu_normal",
-		0, 0x368, 14, 0 },
-	{ GATE_CLK_RXU15, "clk_gate_rxu15", "clk_gate_rp_cpu_normal",
-		0, 0x368, 15, 0 },
-	{ GATE_CLK_RXU16, "clk_gate_rxu16", "clk_gate_rp_cpu_normal",
-		0, 0x368, 16, 0 },
-	{ GATE_CLK_RXU17, "clk_gate_rxu17", "clk_gate_rp_cpu_normal",
-		0, 0x368, 17, 0 },
-	{ GATE_CLK_RXU18, "clk_gate_rxu18", "clk_gate_rp_cpu_normal",
-		0, 0x368, 18, 0 },
-	{ GATE_CLK_RXU19, "clk_gate_rxu19", "clk_gate_rp_cpu_normal",
-		0, 0x368, 19, 0 },
-	{ GATE_CLK_RXU20, "clk_gate_rxu20", "clk_gate_rp_cpu_normal",
-		0, 0x368, 20, 0 },
-	{ GATE_CLK_RXU21, "clk_gate_rxu21", "clk_gate_rp_cpu_normal",
-		0, 0x368, 21, 0 },
-	{ GATE_CLK_RXU22, "clk_gate_rxu22", "clk_gate_rp_cpu_normal",
-		0, 0x368, 22, 0 },
-	{ GATE_CLK_RXU23, "clk_gate_rxu23", "clk_gate_rp_cpu_normal",
-		0, 0x368, 23, 0 },
-	{ GATE_CLK_RXU24, "clk_gate_rxu24", "clk_gate_rp_cpu_normal",
-		0, 0x368, 24, 0 },
-	{ GATE_CLK_RXU25, "clk_gate_rxu25", "clk_gate_rp_cpu_normal",
-		0, 0x368, 25, 0 },
-	{ GATE_CLK_RXU26, "clk_gate_rxu26", "clk_gate_rp_cpu_normal",
-		0, 0x368, 26, 0 },
-	{ GATE_CLK_RXU27, "clk_gate_rxu27", "clk_gate_rp_cpu_normal",
-		0, 0x368, 27, 0 },
-	{ GATE_CLK_RXU28, "clk_gate_rxu28", "clk_gate_rp_cpu_normal",
-		0, 0x368, 28, 0 },
-	{ GATE_CLK_RXU29, "clk_gate_rxu29", "clk_gate_rp_cpu_normal",
-		0, 0x368, 29, 0 },
-	{ GATE_CLK_RXU30, "clk_gate_rxu30", "clk_gate_rp_cpu_normal",
-		0, 0x368, 30, 0 },
-	{ GATE_CLK_RXU31, "clk_gate_rxu31", "clk_gate_rp_cpu_normal",
-		0, 0x368, 31, 0 },
-	{ GATE_CLK_MP0, "clk_gate_mp0", "clk_gate_rp_cpu_normal",
-		CLK_IGNORE_UNUSED | CLK_IS_CRITICAL, 0x384, 0, 0 },
-	{ GATE_CLK_MP1, "clk_gate_mp1", "clk_gate_rp_cpu_normal",
-		CLK_IGNORE_UNUSED | CLK_IS_CRITICAL, 0x38c, 0, 0 },
-	{ GATE_CLK_MP2, "clk_gate_mp2", "clk_gate_rp_cpu_normal",
-		CLK_IGNORE_UNUSED | CLK_IS_CRITICAL, 0x394, 0, 0 },
-	{ GATE_CLK_MP3, "clk_gate_mp3", "clk_gate_rp_cpu_normal",
-		CLK_IGNORE_UNUSED | CLK_IS_CRITICAL, 0x39c, 0, 0 },
-	{ GATE_CLK_MP4, "clk_gate_mp4", "clk_gate_rp_cpu_normal",
-		CLK_IGNORE_UNUSED | CLK_IS_CRITICAL, 0x3a4, 0, 0 },
-	{ GATE_CLK_MP5, "clk_gate_mp5", "clk_gate_rp_cpu_normal",
-		CLK_IGNORE_UNUSED | CLK_IS_CRITICAL, 0x3ac, 0, 0 },
-	{ GATE_CLK_MP6, "clk_gate_mp6", "clk_gate_rp_cpu_normal",
-		CLK_IGNORE_UNUSED | CLK_IS_CRITICAL, 0x3b4, 0, 0 },
-	{ GATE_CLK_MP7, "clk_gate_mp7", "clk_gate_rp_cpu_normal",
-		CLK_IGNORE_UNUSED | CLK_IS_CRITICAL, 0x3bc, 0, 0 },
-	{ GATE_CLK_MP8, "clk_gate_mp8", "clk_gate_rp_cpu_normal",
-		CLK_IGNORE_UNUSED | CLK_IS_CRITICAL, 0x3c4, 0, 0 },
-	{ GATE_CLK_MP9, "clk_gate_mp9", "clk_gate_rp_cpu_normal",
-		CLK_IGNORE_UNUSED | CLK_IS_CRITICAL, 0x3cc, 0, 0 },
-	{ GATE_CLK_MP10, "clk_gate_mp10", "clk_gate_rp_cpu_normal",
-		CLK_IGNORE_UNUSED | CLK_IS_CRITICAL, 0x3d4, 0, 0 },
-	{ GATE_CLK_MP11, "clk_gate_mp11", "clk_gate_rp_cpu_normal",
-		CLK_IGNORE_UNUSED | CLK_IS_CRITICAL, 0x3dc, 0, 0 },
-	{ GATE_CLK_MP12, "clk_gate_mp12", "clk_gate_rp_cpu_normal",
-		CLK_IGNORE_UNUSED | CLK_IS_CRITICAL, 0x3e4, 0, 0 },
-	{ GATE_CLK_MP13, "clk_gate_mp13", "clk_gate_rp_cpu_normal",
-		CLK_IGNORE_UNUSED | CLK_IS_CRITICAL, 0x3ec, 0, 0 },
-	{ GATE_CLK_MP14, "clk_gate_mp14", "clk_gate_rp_cpu_normal",
-		CLK_IGNORE_UNUSED | CLK_IS_CRITICAL, 0x3f4, 0, 0 },
-	{ GATE_CLK_MP15, "clk_gate_mp15", "clk_gate_rp_cpu_normal",
-		CLK_IGNORE_UNUSED | CLK_IS_CRITICAL, 0x3fc, 0, 0 },
+#define MANGO_GATE(_id, _name, _parent_name, _flags, _r_enable, _bit_idx) { \
+		.id = _id,			\
+		.name = _name,			\
+		.parent_name = _parent_name,	\
+		.flags = _flags,		\
+		.offset_enable = _r_enable,	\
+		.bit_idx = _bit_idx,		\
+	}
+
+static const struct mango_gate_clock mango_gate_clks[] = {
+	MANGO_GATE(GATE_CLK_RP_CPU_NORMAL_DIV1,
+		"clk_gate_rp_cpu_normal_div1", "mpll_clock",
+		CLK_SET_RATE_PARENT | CLK_IGNORE_UNUSED | CLK_IS_CRITICAL,
+		R_CLKENREG0, 0),
+
+	MANGO_GATE(GATE_CLK_AXI_DDR_DIV1, "clk_gate_axi_ddr_div1", "mpll_clock",
+		CLK_SET_RATE_PARENT | CLK_IGNORE_UNUSED | CLK_IS_CRITICAL,
+		R_CLKENREG1, 13),
+	MANGO_GATE(GATE_CLK_DDR01_DIV0, "clk_gate_ddr01_div0", "fpll_clock",
+		CLK_SET_RATE_PARENT | CLK_IGNORE_UNUSED,
+		R_CLKENREG1, 14),
+	MANGO_GATE(GATE_CLK_DDR23_DIV0, "clk_gate_ddr23_div0", "fpll_clock",
+		CLK_SET_RATE_PARENT | CLK_IGNORE_UNUSED,
+		R_CLKENREG1, 15),
+
+	MANGO_GATE(GATE_CLK_RP_CPU_NORMAL_DIV0, "clk_gate_rp_cpu_normal_div0", "fpll_clock",
+		CLK_IGNORE_UNUSED | CLK_IS_CRITICAL,
+		R_CLKENREG0, 0),
+	MANGO_GATE(GATE_CLK_AXI_DDR_DIV0, "clk_gate_axi_ddr_div0", "fpll_clock",
+		CLK_IGNORE_UNUSED | CLK_IS_CRITICAL,
+		R_CLKENREG1, 13),
+	MANGO_GATE(GATE_CLK_DDR01_DIV1, "clk_gate_ddr01_div1", "dpll0_clock",
+		CLK_IGNORE_UNUSED,
+		R_CLKENREG1, 14),
+	MANGO_GATE(GATE_CLK_DDR23_DIV1, "clk_gate_ddr23_div1", "dpll1_clock",
+		CLK_IGNORE_UNUSED,
+		R_CLKENREG1, 15),
+
+	MANGO_GATE(GATE_CLK_A53_50M, "clk_gate_a53_50m", "clk_div_50m_a53",
+		CLK_SET_RATE_PARENT | CLK_IGNORE_UNUSED, R_CLKENREG0, 1),
+	MANGO_GATE(GATE_CLK_TOP_RP_CMN_DIV2,
+		"clk_gate_top_rp_cmn_div2", "clk_gate_rp_cpu_normal",
+		CLK_SET_RATE_PARENT | CLK_IGNORE_UNUSED, R_CLKENREG0, 2),
+	MANGO_GATE(GATE_CLK_AXI_PCIE0,
+		"clk_gate_axi_pcie0", "clk_gate_rp_cpu_normal",
+		CLK_SET_RATE_PARENT | CLK_IGNORE_UNUSED, R_CLKENREG1, 8),
+	MANGO_GATE(GATE_CLK_AXI_PCIE1,
+		"clk_gate_axi_pcie1", "clk_gate_rp_cpu_normal",
+		CLK_SET_RATE_PARENT | CLK_IGNORE_UNUSED, R_CLKENREG1, 9),
+	MANGO_GATE(GATE_CLK_HSDMA, "clk_gate_hsdma", "clk_gate_top_rp_cmn_div2",
+		CLK_SET_RATE_PARENT | CLK_IGNORE_UNUSED, R_CLKENREG1, 10),
+
+	MANGO_GATE(GATE_CLK_EMMC_100M, "clk_gate_emmc", "clk_div_emmc",
+		CLK_SET_RATE_PARENT | CLK_IGNORE_UNUSED, R_CLKENREG1, 3),
+	MANGO_GATE(GATE_CLK_SD_100M, "clk_gate_sd", "clk_div_sd",
+		CLK_SET_RATE_PARENT | CLK_IGNORE_UNUSED, R_CLKENREG1, 6),
+	MANGO_GATE(GATE_CLK_TX_ETH0, "clk_gate_tx_eth0", "clk_div_tx_eth0",
+		CLK_SET_RATE_PARENT | CLK_IGNORE_UNUSED, R_CLKENREG0, 30),
+	MANGO_GATE(GATE_CLK_PTP_REF_I_ETH0,
+		"clk_gate_ptp_ref_i_eth0", "clk_div_ptp_ref_i_eth0",
+		CLK_SET_RATE_PARENT | CLK_IGNORE_UNUSED, R_CLKENREG1, 0),
+	MANGO_GATE(GATE_CLK_REF_ETH0, "clk_gate_ref_eth0", "clk_div_ref_eth0",
+		CLK_SET_RATE_PARENT | CLK_IGNORE_UNUSED, R_CLKENREG1, 1),
+	MANGO_GATE(GATE_CLK_UART_500M, "clk_gate_uart_500m", "clk_div_uart_500m",
+		CLK_SET_RATE_PARENT | CLK_IGNORE_UNUSED, R_CLKENREG0, 4),
+	MANGO_GATE(GATE_CLK_AHB_LPC, "clk_gate_ahb_lpc", "clk_div_ahb_lpc",
+		CLK_SET_RATE_PARENT | CLK_IGNORE_UNUSED, R_CLKENREG0, 7),
+	MANGO_GATE(GATE_CLK_EFUSE, "clk_gate_efuse", "clk_div_efuse",
+		CLK_SET_RATE_PARENT | CLK_IGNORE_UNUSED, R_CLKENREG0, 20),
+
+	MANGO_GATE(GATE_CLK_TOP_AXI0, "clk_gate_top_axi0", "clk_div_top_axi0",
+		CLK_SET_RATE_PARENT | CLK_IS_CRITICAL, R_CLKENREG1, 11),
+	MANGO_GATE(GATE_CLK_TOP_AXI_HSPERI,
+		"clk_gate_top_axi_hsperi", "clk_div_top_axi_hsperi",
+		CLK_SET_RATE_PARENT | CLK_IS_CRITICAL, R_CLKENREG1, 12),
+
+	MANGO_GATE(GATE_CLK_AHB_ROM, "clk_gate_ahb_rom", "clk_gate_top_axi0",
+		 CLK_IGNORE_UNUSED, R_CLKENREG0, 8),
+	MANGO_GATE(GATE_CLK_AHB_SF, "clk_gate_ahb_sf", "clk_gate_top_axi0",
+		CLK_IGNORE_UNUSED, R_CLKENREG0, 9),
+	MANGO_GATE(GATE_CLK_AXI_SRAM, "clk_gate_axi_sram", "clk_gate_top_axi0",
+		CLK_IGNORE_UNUSED, R_CLKENREG0, 10),
+	MANGO_GATE(GATE_CLK_APB_TIMER, "clk_gate_apb_timer", "clk_gate_top_axi0",
+		CLK_IGNORE_UNUSED, R_CLKENREG0, 11),
+	MANGO_GATE(GATE_CLK_APB_EFUSE, "clk_gate_apb_efuse", "clk_gate_top_axi0",
+		CLK_IGNORE_UNUSED, R_CLKENREG0, 21),
+	MANGO_GATE(GATE_CLK_APB_GPIO, "clk_gate_apb_gpio", "clk_gate_top_axi0",
+		CLK_IGNORE_UNUSED, R_CLKENREG0, 22),
+	MANGO_GATE(GATE_CLK_APB_GPIO_INTR,
+		"clk_gate_apb_gpio_intr", "clk_gate_top_axi0",
+		CLK_IGNORE_UNUSED, R_CLKENREG0, 23),
+	MANGO_GATE(GATE_CLK_APB_I2C, "clk_gate_apb_i2c", "clk_gate_top_axi0",
+		CLK_IGNORE_UNUSED, R_CLKENREG0, 26),
+	MANGO_GATE(GATE_CLK_APB_WDT, "clk_gate_apb_wdt", "clk_gate_top_axi0",
+		CLK_IGNORE_UNUSED, R_CLKENREG0, 27),
+	MANGO_GATE(GATE_CLK_APB_PWM, "clk_gate_apb_pwm", "clk_gate_top_axi0",
+		CLK_IGNORE_UNUSED, R_CLKENREG0, 28),
+	MANGO_GATE(GATE_CLK_APB_RTC, "clk_gate_apb_rtc", "clk_gate_top_axi0",
+		CLK_IGNORE_UNUSED, R_CLKENREG0, 29),
+
+	MANGO_GATE(GATE_CLK_SYSDMA_AXI,
+		"clk_gate_sysdma_axi", "clk_gate_top_axi_hsperi",
+		CLK_SET_RATE_PARENT | CLK_IGNORE_UNUSED, R_CLKENREG0, 3),
+	MANGO_GATE(GATE_CLK_APB_UART,
+		"clk_gate_apb_uart", "clk_gate_top_axi_hsperi",
+		CLK_SET_RATE_PARENT | CLK_IGNORE_UNUSED, R_CLKENREG0, 5),
+	MANGO_GATE(GATE_CLK_AXI_DBG_I2C,
+		"clk_gate_axi_dbg_i2c", "clk_gate_top_axi_hsperi",
+		CLK_SET_RATE_PARENT | CLK_IGNORE_UNUSED, R_CLKENREG0, 6),
+	MANGO_GATE(GATE_CLK_APB_SPI,
+		"clk_gate_apb_spi", "clk_gate_top_axi_hsperi",
+		CLK_SET_RATE_PARENT | CLK_IGNORE_UNUSED, R_CLKENREG0, 25),
+	MANGO_GATE(GATE_CLK_AXI_ETH0,
+		"clk_gate_axi_eth0", "clk_gate_top_axi_hsperi",
+		CLK_SET_RATE_PARENT | CLK_IGNORE_UNUSED, R_CLKENREG0, 31),
+	MANGO_GATE(GATE_CLK_AXI_EMMC,
+		"clk_gate_axi_emmc", "clk_gate_top_axi_hsperi",
+		CLK_SET_RATE_PARENT | CLK_IGNORE_UNUSED, R_CLKENREG1, 2),
+	MANGO_GATE(GATE_CLK_AXI_SD,
+		"clk_gate_axi_sd", "clk_gate_top_axi_hsperi",
+		CLK_SET_RATE_PARENT | CLK_IGNORE_UNUSED, R_CLKENREG1, 5),
+
+	MANGO_GATE(GATE_CLK_TIMER1, "clk_gate_timer1", "clk_div_timer1",
+		CLK_SET_RATE_PARENT | CLK_IGNORE_UNUSED, R_CLKENREG0, 12),
+	MANGO_GATE(GATE_CLK_TIMER2, "clk_gate_timer2", "clk_div_timer2",
+		CLK_SET_RATE_PARENT | CLK_IGNORE_UNUSED, R_CLKENREG0, 13),
+	MANGO_GATE(GATE_CLK_TIMER3, "clk_gate_timer3", "clk_div_timer3",
+		CLK_SET_RATE_PARENT | CLK_IGNORE_UNUSED, R_CLKENREG0, 14),
+	MANGO_GATE(GATE_CLK_TIMER4, "clk_gate_timer4", "clk_div_timer4",
+		CLK_SET_RATE_PARENT | CLK_IGNORE_UNUSED, R_CLKENREG0, 15),
+	MANGO_GATE(GATE_CLK_TIMER5, "clk_gate_timer5", "clk_div_timer5",
+		CLK_SET_RATE_PARENT | CLK_IGNORE_UNUSED, R_CLKENREG0, 16),
+	MANGO_GATE(GATE_CLK_TIMER6, "clk_gate_timer6", "clk_div_timer6",
+		CLK_SET_RATE_PARENT | CLK_IGNORE_UNUSED, R_CLKENREG0, 17),
+	MANGO_GATE(GATE_CLK_TIMER7, "clk_gate_timer7", "clk_div_timer7",
+		CLK_SET_RATE_PARENT | CLK_IGNORE_UNUSED, R_CLKENREG0, 18),
+	MANGO_GATE(GATE_CLK_TIMER8, "clk_gate_timer8", "clk_div_timer8",
+		CLK_SET_RATE_PARENT | CLK_IGNORE_UNUSED, R_CLKENREG0, 19),
+	MANGO_GATE(GATE_CLK_100K_EMMC, "clk_gate_100k_emmc", "clk_div_100k_emmc",
+		CLK_SET_RATE_PARENT | CLK_IGNORE_UNUSED, R_CLKENREG1, 4),
+	MANGO_GATE(GATE_CLK_100K_SD, "clk_gate_100k_sd", "clk_div_100k_sd",
+		CLK_SET_RATE_PARENT | CLK_IGNORE_UNUSED, R_CLKENREG1, 7),
+	MANGO_GATE(GATE_CLK_GPIO_DB, "clk_gate_gpio_db", "clk_div_gpio_db",
+		CLK_SET_RATE_PARENT | CLK_IGNORE_UNUSED, R_CLKENREG0, 24),
+
+	MANGO_GATE(GATE_CLK_DDR01, "clk_gate_ddr01", "clk_mux_ddr01",
+		CLK_SET_RATE_PARENT | CLK_IGNORE_UNUSED | CLK_IS_CRITICAL,
+		R_CLKENREG1, 14),
+	MANGO_GATE(GATE_CLK_DDR23, "clk_gate_ddr23", "clk_mux_ddr23",
+		CLK_SET_RATE_PARENT | CLK_IGNORE_UNUSED | CLK_IS_CRITICAL,
+		R_CLKENREG1, 15),
+	MANGO_GATE(GATE_CLK_RP_CPU_NORMAL, "clk_gate_rp_cpu_normal", "clk_mux_rp_cpu_normal",
+		CLK_SET_RATE_PARENT | CLK_IGNORE_UNUSED,
+		R_CLKENREG0, 0),
+	MANGO_GATE(GATE_CLK_AXI_DDR, "clk_gate_axi_ddr", "clk_mux_axi_ddr",
+		CLK_SET_RATE_PARENT | CLK_IGNORE_UNUSED | CLK_IS_CRITICAL,
+		R_CLKENREG1, 13),
+
+	MANGO_GATE(GATE_CLK_RXU0, "clk_gate_rxu0", "clk_gate_rp_cpu_normal",
+		0, R_RP_RXU_CLK_ENABLE, 0),
+	MANGO_GATE(GATE_CLK_RXU1, "clk_gate_rxu1", "clk_gate_rp_cpu_normal",
+		0, R_RP_RXU_CLK_ENABLE, 1),
+	MANGO_GATE(GATE_CLK_RXU2, "clk_gate_rxu2", "clk_gate_rp_cpu_normal",
+		0, R_RP_RXU_CLK_ENABLE, 2),
+	MANGO_GATE(GATE_CLK_RXU3, "clk_gate_rxu3", "clk_gate_rp_cpu_normal",
+		0, R_RP_RXU_CLK_ENABLE, 3),
+	MANGO_GATE(GATE_CLK_RXU4, "clk_gate_rxu4", "clk_gate_rp_cpu_normal",
+		0, R_RP_RXU_CLK_ENABLE, 4),
+	MANGO_GATE(GATE_CLK_RXU5, "clk_gate_rxu5", "clk_gate_rp_cpu_normal",
+		0, R_RP_RXU_CLK_ENABLE, 5),
+	MANGO_GATE(GATE_CLK_RXU6, "clk_gate_rxu6", "clk_gate_rp_cpu_normal",
+		0, R_RP_RXU_CLK_ENABLE, 6),
+	MANGO_GATE(GATE_CLK_RXU7, "clk_gate_rxu7", "clk_gate_rp_cpu_normal",
+		0, R_RP_RXU_CLK_ENABLE, 7),
+	MANGO_GATE(GATE_CLK_RXU8, "clk_gate_rxu8", "clk_gate_rp_cpu_normal",
+		0, R_RP_RXU_CLK_ENABLE, 8),
+	MANGO_GATE(GATE_CLK_RXU9, "clk_gate_rxu9", "clk_gate_rp_cpu_normal",
+		0, R_RP_RXU_CLK_ENABLE, 9),
+	MANGO_GATE(GATE_CLK_RXU10, "clk_gate_rxu10", "clk_gate_rp_cpu_normal",
+		0, R_RP_RXU_CLK_ENABLE, 10),
+	MANGO_GATE(GATE_CLK_RXU11, "clk_gate_rxu11", "clk_gate_rp_cpu_normal",
+		0, R_RP_RXU_CLK_ENABLE, 11),
+	MANGO_GATE(GATE_CLK_RXU12, "clk_gate_rxu12", "clk_gate_rp_cpu_normal",
+		0, R_RP_RXU_CLK_ENABLE, 12),
+	MANGO_GATE(GATE_CLK_RXU13, "clk_gate_rxu13", "clk_gate_rp_cpu_normal",
+		0, R_RP_RXU_CLK_ENABLE, 13),
+	MANGO_GATE(GATE_CLK_RXU14, "clk_gate_rxu14", "clk_gate_rp_cpu_normal",
+		0, R_RP_RXU_CLK_ENABLE, 14),
+	MANGO_GATE(GATE_CLK_RXU15, "clk_gate_rxu15", "clk_gate_rp_cpu_normal",
+		0, R_RP_RXU_CLK_ENABLE, 15),
+	MANGO_GATE(GATE_CLK_RXU16, "clk_gate_rxu16", "clk_gate_rp_cpu_normal",
+		0, R_RP_RXU_CLK_ENABLE, 16),
+	MANGO_GATE(GATE_CLK_RXU17, "clk_gate_rxu17", "clk_gate_rp_cpu_normal",
+		0, R_RP_RXU_CLK_ENABLE, 17),
+	MANGO_GATE(GATE_CLK_RXU18, "clk_gate_rxu18", "clk_gate_rp_cpu_normal",
+		0, R_RP_RXU_CLK_ENABLE, 18),
+	MANGO_GATE(GATE_CLK_RXU19, "clk_gate_rxu19", "clk_gate_rp_cpu_normal",
+		0, R_RP_RXU_CLK_ENABLE, 19),
+	MANGO_GATE(GATE_CLK_RXU20, "clk_gate_rxu20", "clk_gate_rp_cpu_normal",
+		0, R_RP_RXU_CLK_ENABLE, 20),
+	MANGO_GATE(GATE_CLK_RXU21, "clk_gate_rxu21", "clk_gate_rp_cpu_normal",
+		0, R_RP_RXU_CLK_ENABLE, 21),
+	MANGO_GATE(GATE_CLK_RXU22, "clk_gate_rxu22", "clk_gate_rp_cpu_normal",
+		0, R_RP_RXU_CLK_ENABLE, 22),
+	MANGO_GATE(GATE_CLK_RXU23, "clk_gate_rxu23", "clk_gate_rp_cpu_normal",
+		0, R_RP_RXU_CLK_ENABLE, 23),
+	MANGO_GATE(GATE_CLK_RXU24, "clk_gate_rxu24", "clk_gate_rp_cpu_normal",
+		0, R_RP_RXU_CLK_ENABLE, 24),
+	MANGO_GATE(GATE_CLK_RXU25, "clk_gate_rxu25", "clk_gate_rp_cpu_normal",
+		0, R_RP_RXU_CLK_ENABLE, 25),
+	MANGO_GATE(GATE_CLK_RXU26, "clk_gate_rxu26", "clk_gate_rp_cpu_normal",
+		0, R_RP_RXU_CLK_ENABLE, 26),
+	MANGO_GATE(GATE_CLK_RXU27, "clk_gate_rxu27", "clk_gate_rp_cpu_normal",
+		0, R_RP_RXU_CLK_ENABLE, 27),
+	MANGO_GATE(GATE_CLK_RXU28, "clk_gate_rxu28", "clk_gate_rp_cpu_normal",
+		0, R_RP_RXU_CLK_ENABLE, 28),
+	MANGO_GATE(GATE_CLK_RXU29, "clk_gate_rxu29", "clk_gate_rp_cpu_normal",
+		0, R_RP_RXU_CLK_ENABLE, 29),
+	MANGO_GATE(GATE_CLK_RXU30, "clk_gate_rxu30", "clk_gate_rp_cpu_normal",
+		0, R_RP_RXU_CLK_ENABLE, 30),
+	MANGO_GATE(GATE_CLK_RXU31, "clk_gate_rxu31", "clk_gate_rp_cpu_normal",
+		0, R_RP_RXU_CLK_ENABLE, 31),
+
+	MANGO_GATE(GATE_CLK_MP0, "clk_gate_mp0", "clk_gate_rp_cpu_normal",
+		CLK_IS_CRITICAL, R_MP0_CONTROL_REG, 0),
+	MANGO_GATE(GATE_CLK_MP1, "clk_gate_mp1", "clk_gate_rp_cpu_normal",
+		CLK_IS_CRITICAL, R_MP1_CONTROL_REG, 0),
+	MANGO_GATE(GATE_CLK_MP2, "clk_gate_mp2", "clk_gate_rp_cpu_normal",
+		CLK_IS_CRITICAL, R_MP2_CONTROL_REG, 0),
+	MANGO_GATE(GATE_CLK_MP3, "clk_gate_mp3", "clk_gate_rp_cpu_normal",
+		CLK_IS_CRITICAL, R_MP3_CONTROL_REG, 0),
+	MANGO_GATE(GATE_CLK_MP4, "clk_gate_mp4", "clk_gate_rp_cpu_normal",
+		CLK_IS_CRITICAL, R_MP4_CONTROL_REG, 0),
+	MANGO_GATE(GATE_CLK_MP5, "clk_gate_mp5", "clk_gate_rp_cpu_normal",
+		CLK_IS_CRITICAL, R_MP5_CONTROL_REG, 0),
+	MANGO_GATE(GATE_CLK_MP6, "clk_gate_mp6", "clk_gate_rp_cpu_normal",
+		CLK_IS_CRITICAL, R_MP6_CONTROL_REG, 0),
+	MANGO_GATE(GATE_CLK_MP7, "clk_gate_mp7", "clk_gate_rp_cpu_normal",
+		CLK_IS_CRITICAL, R_MP7_CONTROL_REG, 0),
+	MANGO_GATE(GATE_CLK_MP8, "clk_gate_mp8", "clk_gate_rp_cpu_normal",
+		CLK_IS_CRITICAL, R_MP8_CONTROL_REG, 0),
+	MANGO_GATE(GATE_CLK_MP9, "clk_gate_mp9", "clk_gate_rp_cpu_normal",
+		CLK_IS_CRITICAL, R_MP9_CONTROL_REG, 0),
+	MANGO_GATE(GATE_CLK_MP10, "clk_gate_mp10", "clk_gate_rp_cpu_normal",
+		CLK_IS_CRITICAL, R_MP10_CONTROL_REG, 0),
+	MANGO_GATE(GATE_CLK_MP11, "clk_gate_mp11", "clk_gate_rp_cpu_normal",
+		CLK_IS_CRITICAL, R_MP11_CONTROL_REG, 0),
+	MANGO_GATE(GATE_CLK_MP12, "clk_gate_mp12", "clk_gate_rp_cpu_normal",
+		CLK_IS_CRITICAL, R_MP12_CONTROL_REG, 0),
+	MANGO_GATE(GATE_CLK_MP13, "clk_gate_mp13", "clk_gate_rp_cpu_normal",
+		CLK_IS_CRITICAL, R_MP13_CONTROL_REG, 0),
+	MANGO_GATE(GATE_CLK_MP14, "clk_gate_mp14", "clk_gate_rp_cpu_normal",
+		CLK_IS_CRITICAL, R_MP14_CONTROL_REG, 0),
+	MANGO_GATE(GATE_CLK_MP15, "clk_gate_mp15", "clk_gate_rp_cpu_normal",
+		CLK_IS_CRITICAL, R_MP15_CONTROL_REG, 0),
 };
 
-static const struct mango_divider_clock s1_div_clks[] = {
-	{ DIV_CLK_MPLL_RP_CPU_NORMAL_0, "s1_clk_div_rp_cpu_normal_0", "s1_clk_gate_rp_cpu_normal_div0",
-		0, 0x2044, 16, 8, CLK_DIVIDER_ONE_BASED |
-			CLK_DIVIDER_ALLOW_ZERO, MANGO_CLK_USE_REG_VAL, },
-	{ DIV_CLK_MPLL_AXI_DDR_0, "s1_clk_div_axi_ddr_0", "s1_clk_gate_axi_ddr_div0",
-		0, 0x20a8, 16, 8, CLK_DIVIDER_ONE_BASED |
-			CLK_DIVIDER_ALLOW_ZERO, MANGO_CLK_USE_REG_VAL, 5},
-	{ DIV_CLK_FPLL_DDR01_1, "s1_clk_div_ddr01_1", "s1_clk_gate_ddr01_div1",
-		0, 0x20b0, 16, 8, CLK_DIVIDER_ONE_BASED |
-			CLK_DIVIDER_ALLOW_ZERO, MANGO_CLK_USE_INIT_VAL, },
-	{ DIV_CLK_FPLL_DDR23_1, "s1_clk_div_ddr23_1", "s1_clk_gate_ddr23_div1",
-		0, 0x20b8, 16, 8, CLK_DIVIDER_ONE_BASED |
-			CLK_DIVIDER_ALLOW_ZERO, MANGO_CLK_USE_INIT_VAL, },
-	{ DIV_CLK_FPLL_RP_CPU_NORMAL_1, "s1_clk_div_rp_cpu_normal_1", "s1_clk_gate_rp_cpu_normal_div1",
-		0, 0x2040, 16, 8, CLK_DIVIDER_ONE_BASED |
-			CLK_DIVIDER_ALLOW_ZERO, MANGO_CLK_USE_REG_VAL, },
-	{ DIV_CLK_FPLL_50M_A53, "s1_clk_div_50m_a53", "s1_fpll_clock",
-		0, 0x2048, 16, 8, CLK_DIVIDER_ONE_BASED |
-			CLK_DIVIDER_ALLOW_ZERO, MANGO_CLK_USE_REG_VAL, },
-	{ DIV_CLK_FPLL_TOP_RP_CMN_DIV2, "s1_clk_div_top_rp_cmn_div2", "s1_clk_mux_rp_cpu_normal",
-		0, 0x204c, 16, 16, CLK_DIVIDER_ONE_BASED |
-			CLK_DIVIDER_ALLOW_ZERO, MANGO_CLK_USE_REG_VAL, },
-	{ DIV_CLK_FPLL_UART_500M, "s1_clk_div_uart_500m", "s1_fpll_clock",
-		0, 0x2050, 16, 7, CLK_DIVIDER_READ_ONLY, MANGO_CLK_USE_REG_VAL, },
-	{ DIV_CLK_FPLL_AHB_LPC, "s1_clk_div_ahb_lpc", "s1_fpll_clock",
-		0, 0x2054, 16, 16, CLK_DIVIDER_ONE_BASED |
-			CLK_DIVIDER_ALLOW_ZERO, MANGO_CLK_USE_REG_VAL, },
-	{ DIV_CLK_FPLL_EFUSE, "s1_clk_div_efuse", "s1_fpll_clock",
-		0, 0x2078, 16, 8, CLK_DIVIDER_ONE_BASED |
-			CLK_DIVIDER_ALLOW_ZERO, MANGO_CLK_USE_REG_VAL, },
-	{ DIV_CLK_FPLL_TX_ETH0, "s1_clk_div_tx_eth0", "s1_fpll_clock",
-		0, 0x2080, 16, 11, CLK_DIVIDER_ONE_BASED |
-			CLK_DIVIDER_ALLOW_ZERO, MANGO_CLK_USE_REG_VAL, },
-	{ DIV_CLK_FPLL_PTP_REF_I_ETH0, "s1_clk_div_ptp_ref_i_eth0", "s1_fpll_clock",
-		0, 0x2084, 16, 8, CLK_DIVIDER_ONE_BASED |
-			CLK_DIVIDER_ALLOW_ZERO, MANGO_CLK_USE_REG_VAL, },
-	{ DIV_CLK_FPLL_REF_ETH0, "s1_clk_div_ref_eth0", "s1_fpll_clock",
-		0, 0x2088, 16, 8, CLK_DIVIDER_ONE_BASED |
-			CLK_DIVIDER_ALLOW_ZERO, MANGO_CLK_USE_REG_VAL, },
-	{ DIV_CLK_FPLL_EMMC, "s1_clk_div_emmc", "s1_fpll_clock",
-		0, 0x208c, 16, 8, CLK_DIVIDER_ONE_BASED |
-			CLK_DIVIDER_ALLOW_ZERO, MANGO_CLK_USE_REG_VAL, },
-	{ DIV_CLK_FPLL_SD, "s1_clk_div_sd", "s1_fpll_clock",
-		0, 0x2094, 16, 8, CLK_DIVIDER_ONE_BASED |
-			CLK_DIVIDER_ALLOW_ZERO, MANGO_CLK_USE_REG_VAL, },
-	{ DIV_CLK_FPLL_TOP_AXI0, "s1_clk_div_top_axi0", "s1_fpll_clock",
-		0, 0x209c, 16, 5, CLK_DIVIDER_ONE_BASED |
-			CLK_DIVIDER_ALLOW_ZERO, MANGO_CLK_USE_REG_VAL, },
-	{ DIV_CLK_FPLL_TOP_AXI_HSPERI, "s1_clk_div_top_axi_hsperi", "s1_fpll_clock",
-		0, 0x20a0, 16, 5, CLK_DIVIDER_ONE_BASED |
-			CLK_DIVIDER_ALLOW_ZERO, MANGO_CLK_USE_REG_VAL, },
-	{ DIV_CLK_FPLL_AXI_DDR_1, "s1_clk_div_axi_ddr_1", "s1_clk_gate_axi_ddr_div1",
-		0, 0x20a4, 16, 8, CLK_DIVIDER_ONE_BASED |
-			CLK_DIVIDER_ALLOW_ZERO, MANGO_CLK_USE_REG_VAL, 5},
-	{ DIV_CLK_FPLL_DIV_TIMER1, "s1_clk_div_timer1", "s1_clk_div_50m_a53",
-		0, 0x2058, 16, 8, CLK_DIVIDER_ONE_BASED |
-			CLK_DIVIDER_ALLOW_ZERO, MANGO_CLK_USE_REG_VAL, },
-	{ DIV_CLK_FPLL_DIV_TIMER2, "s1_clk_div_timer2", "s1_clk_div_50m_a53",
-		0, 0x205c, 16, 8, CLK_DIVIDER_ONE_BASED |
-			CLK_DIVIDER_ALLOW_ZERO, MANGO_CLK_USE_REG_VAL, },
-	{ DIV_CLK_FPLL_DIV_TIMER3, "s1_clk_div_timer3", "s1_clk_div_50m_a53",
-		0, 0x2060, 16, 8, CLK_DIVIDER_ONE_BASED |
-			CLK_DIVIDER_ALLOW_ZERO, MANGO_CLK_USE_REG_VAL, },
-	{ DIV_CLK_FPLL_DIV_TIMER4, "s1_clk_div_timer4", "s1_clk_div_50m_a53",
-		0, 0x2064, 16, 8, CLK_DIVIDER_ONE_BASED |
-			CLK_DIVIDER_ALLOW_ZERO, MANGO_CLK_USE_REG_VAL, },
-	{ DIV_CLK_FPLL_DIV_TIMER5, "s1_clk_div_timer5", "s1_clk_div_50m_a53",
-		0, 0x2068, 16, 8, CLK_DIVIDER_ONE_BASED |
-			CLK_DIVIDER_ALLOW_ZERO, MANGO_CLK_USE_REG_VAL, },
-	{ DIV_CLK_FPLL_DIV_TIMER6, "s1_clk_div_timer6", "s1_clk_div_50m_a53",
-		0, 0x206c, 16, 8, CLK_DIVIDER_ONE_BASED |
-			CLK_DIVIDER_ALLOW_ZERO, MANGO_CLK_USE_REG_VAL, },
-	{ DIV_CLK_FPLL_DIV_TIMER7, "s1_clk_div_timer7", "s1_clk_div_50m_a53",
-		0, 0x2070, 16, 8, CLK_DIVIDER_ONE_BASED |
-			CLK_DIVIDER_ALLOW_ZERO, MANGO_CLK_USE_REG_VAL, },
-	{ DIV_CLK_FPLL_DIV_TIMER8, "s1_clk_div_timer8", "s1_clk_div_50m_a53",
-		0, 0x2074, 16, 8, CLK_DIVIDER_ONE_BASED |
-			CLK_DIVIDER_ALLOW_ZERO, MANGO_CLK_USE_REG_VAL, },
-	{ DIV_CLK_FPLL_100K_EMMC, "s1_clk_div_100k_emmc", "s1_clk_div_top_axi0",
-		0, 0x2090, 16, 8, CLK_DIVIDER_ONE_BASED |
-			CLK_DIVIDER_ALLOW_ZERO, MANGO_CLK_USE_REG_VAL, },
-	{ DIV_CLK_FPLL_100K_SD, "s1_clk_div_100k_sd", "s1_clk_div_top_axi0",
-		0, 0x2098, 16, 8, CLK_DIVIDER_ONE_BASED |
-			CLK_DIVIDER_ALLOW_ZERO, MANGO_CLK_USE_REG_VAL, },
-	{ DIV_CLK_FPLL_GPIO_DB, "s1_clk_div_gpio_db", "s1_clk_div_top_axi0",
-		0, 0x207c, 16, 8, CLK_DIVIDER_ONE_BASED |
-			CLK_DIVIDER_ALLOW_ZERO, MANGO_CLK_USE_REG_VAL, },
-	{ DIV_CLK_DPLL0_DDR01_0, "s1_clk_div_ddr01_0", "s1_clk_gate_ddr01_div0",
-		0, 0x20ac, 16, 8, CLK_DIVIDER_ONE_BASED |
-			CLK_DIVIDER_ALLOW_ZERO, MANGO_CLK_USE_INIT_VAL, },
-	{ DIV_CLK_DPLL1_DDR23_0, "s1_clk_div_ddr23_0", "s1_clk_gate_ddr23_div0",
-		0, 0x20b4, 16, 8, CLK_DIVIDER_ONE_BASED |
-			CLK_DIVIDER_ALLOW_ZERO, MANGO_CLK_USE_INIT_VAL, },
-};
+#define MANGO_MUX(_id, _name, _parent_names, _flags, _r_select, _shift, _width) { \
+		.id = _id,					\
+		.name = _name,					\
+		.parent_names = _parent_names,			\
+		.num_parents = ARRAY_SIZE(_parent_names),	\
+		.flags = _flags,				\
+		.offset_select = _r_select,				\
+		.shift = _shift,				\
+		.width = _width,				\
+	}
 
-static const struct mango_gate_clock s1_gate_clks[] = {
-	{ GATE_CLK_RP_CPU_NORMAL_DIV0, "s1_clk_gate_rp_cpu_normal_div1", "s1_mpll_clock",
-		CLK_SET_RATE_PARENT | CLK_IGNORE_UNUSED | CLK_IS_CRITICAL, 0x2000, 0, 0 },
-	{ GATE_CLK_AXI_DDR_DIV0, "s1_clk_gate_axi_ddr_div1", "s1_mpll_clock",
-		CLK_SET_RATE_PARENT | CLK_IGNORE_UNUSED | CLK_IS_CRITICAL, 0x2004, 13, 0 },
-	{ GATE_CLK_DDR01_DIV0, "s1_clk_gate_ddr01_div0", "s1_fpll_clock",
-		CLK_IGNORE_UNUSED | CLK_IS_CRITICAL, 0x2004, 14, 0 },
-	{ GATE_CLK_DDR23_DIV0, "s1_clk_gate_ddr23_div0", "s1_fpll_clock",
-		CLK_IGNORE_UNUSED | CLK_IS_CRITICAL, 0x2004, 15, 0 },
-	{ GATE_CLK_RP_CPU_NORMAL_DIV1, "s1_clk_gate_rp_cpu_normal_div0", "s1_fpll_clock",
-		CLK_IGNORE_UNUSED | CLK_IS_CRITICAL, 0x2000, 0, 0 },
-	{ GATE_CLK_AXI_DDR_DIV1, "s1_clk_gate_axi_ddr_div0", "s1_fpll_clock",
-		CLK_IGNORE_UNUSED | CLK_IS_CRITICAL, 0x2004, 13, 0 },
-	{ GATE_CLK_DDR01_DIV1, "s1_clk_gate_ddr01_div1", "s1_dpll0_clock",
-		CLK_SET_RATE_PARENT | CLK_IGNORE_UNUSED, 0x2004, 14, 0 },
-	{ GATE_CLK_DDR23_DIV1, "s1_clk_gate_ddr23_div1", "s1_dpll1_clock",
-		CLK_SET_RATE_PARENT | CLK_IGNORE_UNUSED, 0x2004, 15, 0 },
-	{ GATE_CLK_A53_50M, "s1_clk_gate_a53_50m", "s1_clk_div_50m_a53",
-		CLK_SET_RATE_PARENT | CLK_IGNORE_UNUSED, 0x2000, 1, 0 },
-	{ GATE_CLK_TOP_RP_CMN_DIV2, "s1_clk_gate_top_rp_cmn_div2", "s1_clk_gate_rp_cpu_normal",
-		CLK_SET_RATE_PARENT | CLK_IGNORE_UNUSED, 0x2000, 2, 0 },
-	{ GATE_CLK_AXI_PCIE0, "s1_clk_gate_axi_pcie0", "s1_clk_gate_rp_cpu_normal",
-		CLK_SET_RATE_PARENT | CLK_IGNORE_UNUSED, 0x2004, 8, 0 },
-	{ GATE_CLK_AXI_PCIE1, "s1_clk_gate_axi_pcie1", "s1_clk_gate_rp_cpu_normal",
-		CLK_SET_RATE_PARENT | CLK_IGNORE_UNUSED, 0x2004, 9, 0 },
-	{ GATE_CLK_HSDMA, "s1_clk_gate_hsdma", "s1_clk_gate_top_rp_cmn_div2",
-		CLK_SET_RATE_PARENT, 0x2004, 10, 0 },
-	{ GATE_CLK_EMMC_100M, "s1_clk_gate_emmc", "s1_clk_div_emmc",
-		CLK_SET_RATE_PARENT, 0x2004, 3, 0 },
-	{ GATE_CLK_SD_100M, "s1_clk_gate_sd", "s1_clk_div_sd",
-		CLK_SET_RATE_PARENT, 0x2004, 6, 0 },
-	{ GATE_CLK_TX_ETH0, "s1_clk_gate_tx_eth0", "s1_clk_div_tx_eth0",
-		CLK_SET_RATE_PARENT, 0x2000, 30, 0 },
-	{ GATE_CLK_PTP_REF_I_ETH0, "s1_clk_gate_ptp_ref_i_eth0", "s1_clk_div_ptp_ref_i_eth0",
-		CLK_SET_RATE_PARENT, 0x2004, 0, 0 },
-	{ GATE_CLK_REF_ETH0, "s1_clk_gate_ref_eth0", "s1_clk_div_ref_eth0",
-		CLK_SET_RATE_PARENT, 0x2004, 1, 0 },
-	{ GATE_CLK_UART_500M, "s1_clk_gate_uart_500m", "s1_clk_div_uart_500m",
-		CLK_SET_RATE_PARENT | CLK_IGNORE_UNUSED, 0x2000, 4, 0 },
-	{ GATE_CLK_AHB_LPC, "s1_clk_gate_ahb_lpc", "s1_clk_div_ahb_lpc",
-		CLK_SET_RATE_PARENT, 0x2000, 7, 0 },
-	{ GATE_CLK_EFUSE, "s1_clk_gate_efuse", "s1_clk_div_efuse",
-		CLK_SET_RATE_PARENT, 0x2000, 20, 0},
-	{ GATE_CLK_TOP_AXI0, "s1_clk_gate_top_axi0", "s1_clk_div_top_axi0",
-		CLK_SET_RATE_PARENT | CLK_IGNORE_UNUSED | CLK_IS_CRITICAL, 0x2004, 11, 0 },
-	{ GATE_CLK_TOP_AXI_HSPERI, "s1_clk_gate_top_axi_hsperi", "s1_clk_div_top_axi_hsperi",
-		CLK_SET_RATE_PARENT | CLK_IGNORE_UNUSED | CLK_IS_CRITICAL, 0x2004, 12, 0 },
-	{ GATE_CLK_AHB_ROM, "s1_clk_gate_ahb_rom", "s1_clk_gate_top_axi0",
-		0, 0x2000, 8, 0 },
-	{ GATE_CLK_AHB_SF, "s1_clk_gate_ahb_sf", "s1_clk_gate_top_axi0",
-		0, 0x2000, 9, 0 },
-	{ GATE_CLK_AXI_SRAM, "s1_clk_gate_axi_sram", "s1_clk_gate_top_axi0",
-		CLK_IGNORE_UNUSED, 0x2000, 10, 0 },
-	{ GATE_CLK_APB_TIMER, "s1_clk_gate_apb_timer", "s1_clk_gate_top_axi0",
-		CLK_IGNORE_UNUSED, 0x2000, 11, 0 },
-	{ GATE_CLK_APB_EFUSE, "s1_clk_gate_apb_efuse", "s1_clk_gate_top_axi0",
-		0, 0x2000, 21, 0 },
-	{ GATE_CLK_APB_GPIO, "s1_clk_gate_apb_gpio", "s1_clk_gate_top_axi0",
-		0, 0x2000, 22, 0 },
-	{ GATE_CLK_APB_GPIO_INTR, "s1_clk_gate_apb_gpio_intr", "s1_clk_gate_top_axi0",
-		0, 0x2000, 23, 0 },
-	{ GATE_CLK_APB_I2C, "s1_clk_gate_apb_i2c", "s1_clk_gate_top_axi0",
-		0, 0x2000, 26, 0 },
-	{ GATE_CLK_APB_WDT, "s1_clk_gate_apb_wdt", "s1_clk_gate_top_axi0",
-		0, 0x2000, 27, 0 },
-	{ GATE_CLK_APB_PWM, "s1_clk_gate_apb_pwm", "s1_clk_gate_top_axi0",
-		0, 0x2000, 28, 0 },
-	{ GATE_CLK_APB_RTC, "s1_clk_gate_apb_rtc", "s1_clk_gate_top_axi0",
-		0, 0x2000, 29, 0 },
-	{ GATE_CLK_SYSDMA_AXI, "s1_clk_gate_sysdma_axi", "s1_clk_gate_top_axi_hsperi",
-		CLK_SET_RATE_PARENT, 0x2000, 3, 0 },
-	{ GATE_CLK_APB_UART, "s1_clk_gate_apb_uart", "s1_clk_gate_top_axi_hsperi",
-		CLK_SET_RATE_PARENT, 0x2000, 5, 0 },
-	{ GATE_CLK_AXI_DBG_I2C, "s1_clk_gate_axi_dbg_i2c", "s1_clk_gate_top_axi_hsperi",
-		CLK_SET_RATE_PARENT, 0x2000, 6, 0 },
-	{ GATE_CLK_APB_SPI, "s1_clk_gate_apb_spi", "s1_clk_gate_top_axi_hsperi",
-		CLK_SET_RATE_PARENT, 0x2000, 25, 0 },
-	{ GATE_CLK_AXI_ETH0, "s1_clk_gate_axi_eth0", "s1_clk_gate_top_axi_hsperi",
-		CLK_SET_RATE_PARENT, 0x2000, 31, 0 },
-	{ GATE_CLK_AXI_EMMC, "s1_clk_gate_axi_emmc", "s1_clk_gate_top_axi_hsperi",
-		CLK_SET_RATE_PARENT, 0x2004, 2, 0 },
-	{ GATE_CLK_AXI_SD, "s1_clk_gate_axi_sd", "s1_clk_gate_top_axi_hsperi",
-		CLK_SET_RATE_PARENT, 0x2004, 5, 0 },
-	{ GATE_CLK_TIMER1, "s1_clk_gate_timer1", "s1_clk_div_timer1",
-		CLK_SET_RATE_PARENT, 0x2000, 12, 0 },
-	{ GATE_CLK_TIMER2, "s1_clk_gate_timer2", "s1_clk_div_timer2",
-		CLK_SET_RATE_PARENT, 0x2000, 13, 0 },
-	{ GATE_CLK_TIMER3, "s1_clk_gate_timer3", "s1_clk_div_timer3",
-		CLK_SET_RATE_PARENT, 0x2000, 14, 0 },
-	{ GATE_CLK_TIMER4, "s1_clk_gate_timer4", "s1_clk_div_timer4",
-		CLK_SET_RATE_PARENT, 0x2000, 15, 0 },
-	{ GATE_CLK_TIMER5, "s1_clk_gate_timer5", "s1_clk_div_timer5",
-		CLK_SET_RATE_PARENT, 0x2000, 16, 0 },
-	{ GATE_CLK_TIMER6, "s1_clk_gate_timer6", "s1_clk_div_timer6",
-		CLK_SET_RATE_PARENT, 0x2000, 17, 0 },
-	{ GATE_CLK_TIMER7, "s1_clk_gate_timer7", "s1_clk_div_timer7",
-		CLK_SET_RATE_PARENT, 0x2000, 18, 0 },
-	{ GATE_CLK_TIMER8, "s1_clk_gate_timer8", "s1_clk_div_timer8",
-		CLK_SET_RATE_PARENT, 0x2000, 19, 0 },
-	{ GATE_CLK_100K_EMMC, "s1_clk_gate_100k_emmc", "s1_clk_div_100k_emmc",
-		CLK_SET_RATE_PARENT, 0x2004, 4, 0 },
-	{ GATE_CLK_100K_SD, "s1_clk_gate_100k_sd", "s1_clk_div_100k_sd",
-		CLK_SET_RATE_PARENT, 0x2004, 7, 0 },
-	{ GATE_CLK_GPIO_DB, "s1_clk_gate_gpio_db", "s1_clk_div_gpio_db",
-		CLK_SET_RATE_PARENT, 0x2000, 24, 0 },
-	{ GATE_CLK_DDR01, "s1_clk_gate_ddr01", "s1_clk_mux_ddr01",
-		CLK_SET_RATE_PARENT | CLK_IGNORE_UNUSED | CLK_IS_CRITICAL, 0x2004, 14, 0 },
-	{ GATE_CLK_DDR23, "s1_clk_gate_ddr23", "s1_clk_mux_ddr23",
-		CLK_SET_RATE_PARENT | CLK_IGNORE_UNUSED | CLK_IS_CRITICAL, 0x2004, 15, 0 },
-	{ GATE_CLK_RP_CPU_NORMAL, "s1_clk_gate_rp_cpu_normal", "s1_clk_mux_rp_cpu_normal",
-		CLK_SET_RATE_PARENT | CLK_IGNORE_UNUSED | CLK_IS_CRITICAL, 0x2000, 0, 0 },
-	{ GATE_CLK_AXI_DDR, "s1_clk_gate_axi_ddr", "s1_clk_mux_axi_ddr",
-		CLK_SET_RATE_PARENT | CLK_IGNORE_UNUSED | CLK_IS_CRITICAL, 0x2004, 13, 0 },
-	{ GATE_CLK_RXU0, "s1_clk_gate_rxu0", "s1_clk_gate_rp_cpu_normal",
-		0, 0x368, 0, 0 },
-	{ GATE_CLK_RXU1, "s1_clk_gate_rxu1", "s1_clk_gate_rp_cpu_normal",
-		0, 0x368, 1, 0 },
-	{ GATE_CLK_RXU2, "s1_clk_gate_rxu2", "s1_clk_gate_rp_cpu_normal",
-		0, 0x368, 2, 0 },
-	{ GATE_CLK_RXU3, "s1_clk_gate_rxu3", "s1_clk_gate_rp_cpu_normal",
-		0, 0x368, 3, 0 },
-	{ GATE_CLK_RXU4, "s1_clk_gate_rxu4", "s1_clk_gate_rp_cpu_normal",
-		0, 0x368, 4, 0 },
-	{ GATE_CLK_RXU5, "s1_clk_gate_rxu5", "s1_clk_gate_rp_cpu_normal",
-		0, 0x368, 5, 0 },
-	{ GATE_CLK_RXU6, "s1_clk_gate_rxu6", "s1_clk_gate_rp_cpu_normal",
-		0, 0x368, 6, 0 },
-	{ GATE_CLK_RXU7, "s1_clk_gate_rxu7", "s1_clk_gate_rp_cpu_normal",
-		0, 0x368, 7, 0 },
-	{ GATE_CLK_RXU8, "s1_clk_gate_rxu8", "s1_clk_gate_rp_cpu_normal",
-		0, 0x368, 8, 0 },
-	{ GATE_CLK_RXU9, "s1_clk_gate_rxu9", "s1_clk_gate_rp_cpu_normal",
-		0, 0x368, 9, 0 },
-	{ GATE_CLK_RXU10, "s1_clk_gate_rxu10", "s1_clk_gate_rp_cpu_normal",
-		0, 0x368, 10, 0 },
-	{ GATE_CLK_RXU11, "s1_clk_gate_rxu11", "s1_clk_gate_rp_cpu_normal",
-		0, 0x368, 11, 0 },
-	{ GATE_CLK_RXU12, "s1_clk_gate_rxu12", "s1_clk_gate_rp_cpu_normal",
-		0, 0x368, 12, 0 },
-	{ GATE_CLK_RXU13, "s1_clk_gate_rxu13", "s1_clk_gate_rp_cpu_normal",
-		0, 0x368, 13, 0 },
-	{ GATE_CLK_RXU14, "s1_clk_gate_rxu14", "s1_clk_gate_rp_cpu_normal",
-		0, 0x368, 14, 0 },
-	{ GATE_CLK_RXU15, "s1_clk_gate_rxu15", "s1_clk_gate_rp_cpu_normal",
-		0, 0x368, 15, 0 },
-	{ GATE_CLK_RXU16, "s1_clk_gate_rxu16", "s1_clk_gate_rp_cpu_normal",
-		0, 0x368, 16, 0 },
-	{ GATE_CLK_RXU17, "s1_clk_gate_rxu17", "s1_clk_gate_rp_cpu_normal",
-		0, 0x368, 17, 0 },
-	{ GATE_CLK_RXU18, "s1_clk_gate_rxu18", "s1_clk_gate_rp_cpu_normal",
-		0, 0x368, 18, 0 },
-	{ GATE_CLK_RXU19, "s1_clk_gate_rxu19", "s1_clk_gate_rp_cpu_normal",
-		0, 0x368, 19, 0 },
-	{ GATE_CLK_RXU20, "s1_clk_gate_rxu20", "s1_clk_gate_rp_cpu_normal",
-		0, 0x368, 20, 0 },
-	{ GATE_CLK_RXU21, "s1_clk_gate_rxu21", "s1_clk_gate_rp_cpu_normal",
-		0, 0x368, 21, 0 },
-	{ GATE_CLK_RXU22, "s1_clk_gate_rxu22", "s1_clk_gate_rp_cpu_normal",
-		0, 0x368, 22, 0 },
-	{ GATE_CLK_RXU23, "s1_clk_gate_rxu23", "s1_clk_gate_rp_cpu_normal",
-		0, 0x368, 23, 0 },
-	{ GATE_CLK_RXU24, "s1_clk_gate_rxu24", "s1_clk_gate_rp_cpu_normal",
-		0, 0x368, 24, 0 },
-	{ GATE_CLK_RXU25, "s1_clk_gate_rxu25", "s1_clk_gate_rp_cpu_normal",
-		0, 0x368, 25, 0 },
-	{ GATE_CLK_RXU26, "s1_clk_gate_rxu26", "s1_clk_gate_rp_cpu_normal",
-		0, 0x368, 26, 0 },
-	{ GATE_CLK_RXU27, "s1_clk_gate_rxu27", "s1_clk_gate_rp_cpu_normal",
-		0, 0x368, 27, 0 },
-	{ GATE_CLK_RXU28, "s1_clk_gate_rxu28", "s1_clk_gate_rp_cpu_normal",
-		0, 0x368, 28, 0 },
-	{ GATE_CLK_RXU29, "s1_clk_gate_rxu29", "s1_clk_gate_rp_cpu_normal",
-		0, 0x368, 29, 0 },
-	{ GATE_CLK_RXU30, "s1_clk_gate_rxu30", "s1_clk_gate_rp_cpu_normal",
-		0, 0x368, 30, 0 },
-	{ GATE_CLK_RXU31, "s1_clk_gate_rxu31", "s1_clk_gate_rp_cpu_normal",
-		0, 0x368, 31, 0 },
-	{ GATE_CLK_MP0, "s1_clk_gate_mp0", "s1_clk_gate_rp_cpu_normal",
-		CLK_IGNORE_UNUSED | CLK_IS_CRITICAL, 0x384, 0, 0 },
-	{ GATE_CLK_MP1, "s1_clk_gate_mp1", "s1_clk_gate_rp_cpu_normal",
-		CLK_IGNORE_UNUSED | CLK_IS_CRITICAL, 0x38c, 0, 0 },
-	{ GATE_CLK_MP2, "s1_clk_gate_mp2", "s1_clk_gate_rp_cpu_normal",
-		CLK_IGNORE_UNUSED | CLK_IS_CRITICAL, 0x394, 0, 0 },
-	{ GATE_CLK_MP3, "s1_clk_gate_mp3", "s1_clk_gate_rp_cpu_normal",
-		CLK_IGNORE_UNUSED | CLK_IS_CRITICAL, 0x39c, 0, 0 },
-	{ GATE_CLK_MP4, "s1_clk_gate_mp4", "s1_clk_gate_rp_cpu_normal",
-		CLK_IGNORE_UNUSED | CLK_IS_CRITICAL, 0x3a4, 0, 0 },
-	{ GATE_CLK_MP5, "s1_clk_gate_mp5", "s1_clk_gate_rp_cpu_normal",
-		CLK_IGNORE_UNUSED | CLK_IS_CRITICAL, 0x3ac, 0, 0 },
-	{ GATE_CLK_MP6, "s1_clk_gate_mp6", "s1_clk_gate_rp_cpu_normal",
-		CLK_IGNORE_UNUSED | CLK_IS_CRITICAL, 0x3b4, 0, 0 },
-	{ GATE_CLK_MP7, "s1_clk_gate_mp7", "s1_clk_gate_rp_cpu_normal",
-		CLK_IGNORE_UNUSED | CLK_IS_CRITICAL, 0x3bc, 0, 0 },
-	{ GATE_CLK_MP8, "s1_clk_gate_mp8", "s1_clk_gate_rp_cpu_normal",
-		CLK_IGNORE_UNUSED | CLK_IS_CRITICAL, 0x3c4, 0, 0 },
-	{ GATE_CLK_MP9, "s1_clk_gate_mp9", "s1_clk_gate_rp_cpu_normal",
-		CLK_IGNORE_UNUSED | CLK_IS_CRITICAL, 0x3cc, 0, 0 },
-	{ GATE_CLK_MP10, "s1_clk_gate_mp10", "s1_clk_gate_rp_cpu_normal",
-		CLK_IGNORE_UNUSED | CLK_IS_CRITICAL, 0x3d4, 0, 0 },
-	{ GATE_CLK_MP11, "s1_clk_gate_mp11", "s1_clk_gate_rp_cpu_normal",
-		CLK_IGNORE_UNUSED | CLK_IS_CRITICAL, 0x3dc, 0, 0 },
-	{ GATE_CLK_MP12, "s1_clk_gate_mp12", "s1_clk_gate_rp_cpu_normal",
-		CLK_IGNORE_UNUSED | CLK_IS_CRITICAL, 0x3e4, 0, 0 },
-	{ GATE_CLK_MP13, "s1_clk_gate_mp13", "s1_clk_gate_rp_cpu_normal",
-		CLK_IGNORE_UNUSED | CLK_IS_CRITICAL, 0x3ec, 0, 0 },
-	{ GATE_CLK_MP14, "s1_clk_gate_mp14", "s1_clk_gate_rp_cpu_normal",
-		CLK_IGNORE_UNUSED | CLK_IS_CRITICAL, 0x3f4, 0, 0 },
-	{ GATE_CLK_MP15, "s1_clk_gate_mp15", "s1_clk_gate_rp_cpu_normal",
-		CLK_IGNORE_UNUSED | CLK_IS_CRITICAL, 0x3fc, 0, 0 },
-};
-
-/* socket0 mux clocks */
 static const char *const clk_mux_ddr01_p[] = {
 			"clk_div_ddr01_0", "clk_div_ddr01_1"};
 static const char *const clk_mux_ddr23_p[] = {
@@ -700,278 +578,374 @@ static const char *const clk_mux_rp_cpu_normal_p[] = {
 static const char *const clk_mux_axi_ddr_p[] = {
 			"clk_div_axi_ddr_0", "clk_div_axi_ddr_1"};
 
-struct mango_mux_clock s0_mux_clks[] = {
-	{
-		MUX_CLK_DDR01, "clk_mux_ddr01", clk_mux_ddr01_p,
-		ARRAY_SIZE(clk_mux_ddr01_p),
-		CLK_SET_RATE_PARENT | CLK_SET_RATE_NO_REPARENT |
-			CLK_MUX_READ_ONLY,
-		0x2020, 2, 1, 0,
-	},
-	{
-		MUX_CLK_DDR23, "clk_mux_ddr23", clk_mux_ddr23_p,
-		ARRAY_SIZE(clk_mux_ddr23_p),
-		CLK_SET_RATE_PARENT | CLK_SET_RATE_NO_REPARENT |
-			CLK_MUX_READ_ONLY,
-		0x2020, 3, 1, 0,
-	},
-	{
-		MUX_CLK_RP_CPU_NORMAL, "clk_mux_rp_cpu_normal", clk_mux_rp_cpu_normal_p,
-		ARRAY_SIZE(clk_mux_rp_cpu_normal_p),
+static struct mango_mux_clock mango_mux_clks[] = {
+	MANGO_MUX(MUX_CLK_DDR01, "clk_mux_ddr01", clk_mux_ddr01_p,
+		CLK_SET_RATE_PARENT | CLK_SET_RATE_NO_REPARENT | CLK_MUX_READ_ONLY,
+		R_CLKSELREG0, 2, 1),
+	MANGO_MUX(MUX_CLK_DDR23, "clk_mux_ddr23", clk_mux_ddr23_p,
+		CLK_SET_RATE_PARENT | CLK_SET_RATE_NO_REPARENT | CLK_MUX_READ_ONLY,
+		R_CLKSELREG0, 3, 1),
+	MANGO_MUX(MUX_CLK_RP_CPU_NORMAL, "clk_mux_rp_cpu_normal", clk_mux_rp_cpu_normal_p,
 		CLK_SET_RATE_PARENT | CLK_SET_RATE_NO_REPARENT,
-		0x2020, 0, 1, 0,
-	},
-	{
-		MUX_CLK_AXI_DDR, "clk_mux_axi_ddr", clk_mux_axi_ddr_p,
-		ARRAY_SIZE(clk_mux_axi_ddr_p),
+		R_CLKSELREG0, 0, 1),
+	MANGO_MUX(MUX_CLK_AXI_DDR, "clk_mux_axi_ddr", clk_mux_axi_ddr_p,
 		CLK_SET_RATE_PARENT | CLK_SET_RATE_NO_REPARENT,
-		0x2020, 1, 1, 0,
-	},
+		R_CLKSELREG0, 1, 1),
 };
 
-/* socket1 mux clocks */
-static const char *const s1_clk_mux_ddr01_p[] = {
-			"s1_clk_div_ddr01_0", "s1_clk_div_ddr01_1"};
-static const char *const s1_clk_mux_ddr23_p[] = {
-			"s1_clk_div_ddr23_0", "s1_clk_div_ddr23_1"};
-static const char *const s1_clk_mux_rp_cpu_normal_p[] = {
-			"s1_clk_div_rp_cpu_normal_0", "s1_clk_div_rp_cpu_normal_1"};
-static const char *const s1_clk_mux_axi_ddr_p[] = {
-			"s1_clk_div_axi_ddr_0", "s1_clk_div_axi_ddr_1"};
+static int mango_clk_register_plls(struct mango_clk_data *clk_data,
+				   struct mango_pll_clock pll_clks[],
+				   int num_pll_clks)
+{
+	struct clk_hw *hw;
+	struct mango_pll_clock *pll;
+	int i, ret = 0;
 
-struct mango_mux_clock s1_mux_clks[] = {
-	{
-		MUX_CLK_DDR01, "s1_clk_mux_ddr01", s1_clk_mux_ddr01_p,
-		ARRAY_SIZE(s1_clk_mux_ddr01_p),
-		CLK_SET_RATE_PARENT | CLK_SET_RATE_NO_REPARENT |
-			CLK_MUX_READ_ONLY,
-		0x2020, 2, 1, 0,
-	},
-	{
-		MUX_CLK_DDR23, "s1_clk_mux_ddr23", s1_clk_mux_ddr23_p,
-		ARRAY_SIZE(s1_clk_mux_ddr23_p),
-		CLK_SET_RATE_PARENT | CLK_SET_RATE_NO_REPARENT |
-			CLK_MUX_READ_ONLY,
-		0x2020, 3, 1, 0,
-	},
-	{
-		MUX_CLK_RP_CPU_NORMAL, "s1_clk_mux_rp_cpu_normal", s1_clk_mux_rp_cpu_normal_p,
-		ARRAY_SIZE(s1_clk_mux_rp_cpu_normal_p),
-		CLK_SET_RATE_PARENT | CLK_SET_RATE_NO_REPARENT,
-		0x2020, 0, 1, 0,
-	},
-	{
-		MUX_CLK_AXI_DDR, "s1_clk_mux_axi_ddr", s1_clk_mux_axi_ddr_p,
-		ARRAY_SIZE(s1_clk_mux_axi_ddr_p),
-		CLK_SET_RATE_PARENT | CLK_SET_RATE_NO_REPARENT,
-		0x2020, 1, 1, 0,
-	},
+	for (i = 0; i < num_pll_clks; i++) {
+		pll = &(pll_clks[i]);
+		/* assign these for ops usage during registration */
+		pll->map = clk_data->syscon;
+		pll->lock = &clk_data->lock;
+
+		hw = &pll->hw;
+		ret = clk_hw_register(NULL, hw);
+		if (ret) {
+			pr_err("failed to register clock %s\n", pll->name);
+			break;
+		}
+
+		dbg_info("registered [%d : %s]\n", pll->id, pll->name);
+		clk_data->onecell_data.hws[pll->id] = hw;
+	}
+
+	/* leave unregister to outside if failed */
+	return ret;
+}
+
+static int mango_clk_register_divs(struct mango_clk_data *clk_data,
+				   struct mango_divider_clock div_clks[],
+				   int num_div_clks)
+{
+	struct clk_hw *hw;
+	struct mango_divider_clock *div;
+	int i, val, ret = 0;
+
+	for (i = 0; i < num_div_clks; i++) {
+		div = &(div_clks[i]);
+
+		if (div->div_flags & CLK_DIVIDER_HIWORD_MASK) {
+			if (div->width + div->shift > 16) {
+				pr_warn("divider value exceeds LOWORD field\n");
+				ret = -EINVAL;
+				break;
+			}
+		}
+
+		div->reg = clk_data->iobase + div->offset_ctrl;
+		div->lock = &(clk_data->lock);
+
+		hw = &div->hw;
+		ret = clk_hw_register(NULL, hw);
+		if (ret) {
+			pr_err("failed to register clock %s\n", div->name);
+			break;
+		}
+
+		dbg_info("registered [%d : %s]\n", div->id, div->name);
+		clk_data->onecell_data.hws[div->id] = hw;
+
+		if (div->initial_val >= 0) {
+			regmap_read(clk_data->syscon, div->offset_ctrl, &val);
+
+			/*
+			 * set a default divider factor,
+			 * clk driver should not select divider clock as the
+			 * clock source, before set the divider by right process
+			 * (assert div, set div factor, de assert div).
+			 */
+			if (div->initial_val > 0)
+				val |= (div->initial_val << 16 | 1 << 3);
+			else {
+				/*
+				 * the div register is config to use divider factor, don't change divider
+				 */
+				if (!(val >> 3 & 0x1))
+					val |= 1 << 16;
+			}
+
+			regmap_write(clk_data->syscon, div->offset_ctrl, val);
+		}
+	}
+
+	/* leave unregister to outside if failed */
+	return ret;
+}
+
+static int mango_clk_register_gates(struct mango_clk_data *clk_data,
+				    const struct mango_gate_clock gate_clks[],
+				    int num_gate_clks)
+{
+	struct clk_hw *hw;
+	const struct mango_gate_clock *gate;
+	int i, ret = 0;
+
+	for (i = 0; i < num_gate_clks; i++) {
+		gate = &(gate_clks[i]);
+		hw = clk_hw_register_gate(
+			NULL,
+			gate->name,
+			gate->parent_name,
+			gate->flags,
+			clk_data->iobase + gate->offset_enable,
+			gate->bit_idx,
+			0,
+			&(clk_data->lock));
+		if (IS_ERR(hw)) {
+			pr_err("failed to register clock %s\n", gate->name);
+			ret = PTR_ERR(hw);
+			break;
+		}
+
+		dbg_info("registered [%d : %s]\n", gate->id, gate->name);
+		clk_data->onecell_data.hws[gate->id] = hw;
+	}
+
+	/* leave unregister to outside if failed */
+	return ret;
+}
+
+struct mux_cb_clk_name {
+	const char *name;
+	struct list_head node;
 };
 
-struct mango_clk_table pll_clk_tables = {
-	.pll_clks_num = ARRAY_SIZE(mango_root_pll_clks),
-	.pll_clks = mango_root_pll_clks,
-};
+static struct list_head mux_cb_clk_name_list =
+	LIST_HEAD_INIT(mux_cb_clk_name_list);
+static int mango_mux_notifier_cb(struct notifier_block *nb,
+				unsigned long event, void *data)
+{
+	int ret = 0;
+	static unsigned char mux_id = 1;
+	struct clk_notifier_data *ndata = data;
+	struct clk_hw *hw = __clk_get_hw(ndata->clk);
+	const struct clk_ops *ops = &clk_mux_ops;
+	struct mux_cb_clk_name *cb_lsit;
 
-struct mango_clk_table div_clk_tables[] = {
-	{
-		.id = S0_DIV_CLK_TABLE,
-		.div_clks_num = ARRAY_SIZE(s0_div_clks),
-		.div_clks = s0_div_clks,
-		.gate_clks_num = ARRAY_SIZE(s0_gate_clks),
-		.gate_clks = s0_gate_clks,
-	},{
-		.id = S1_DIV_CLK_TABLE,
-		.div_clks_num = ARRAY_SIZE(s1_div_clks),
-		.div_clks = s1_div_clks,
-		.gate_clks_num = ARRAY_SIZE(s1_gate_clks),
-		.gate_clks = s1_gate_clks,
-	},
-};
+	if (event == PRE_RATE_CHANGE) {
+		struct clk_hw *hw_p = clk_hw_get_parent(hw);
 
-struct mango_clk_table mux_clk_tables[] = {
-	{
-		.id = S0_MUX_CLK_TABLE,
-		.mux_clks_num = ARRAY_SIZE(s0_mux_clks),
-		.mux_clks = s0_mux_clks,
-	},{
-		.id = S1_MUX_CLK_TABLE,
-		.mux_clks_num = ARRAY_SIZE(s1_mux_clks),
-		.mux_clks = s1_mux_clks,
-	},
-};
+		cb_lsit = kmalloc(sizeof(*cb_lsit), GFP_KERNEL);
+		if (cb_lsit) {
+			INIT_LIST_HEAD(&cb_lsit->node);
+			list_add_tail(&cb_lsit->node, &mux_cb_clk_name_list);
+		} else {
+			pr_err("mux cb kmalloc mem fail\n");
+			goto out;
+		}
 
-static const struct of_device_id mango_clk_match_ids_tables[] = {
-	{
-		.compatible = "mango, pll-clock",
-		.data = &pll_clk_tables,
-	},
-	{
-		.compatible = "mango, pll-child-clock",
-		.data = div_clk_tables,
-	},
-	{
-		.compatible = "mango, pll-mux-clock",
-		.data = mux_clk_tables,
-	},
-	{
-		.compatible = "mango, clk-default-rates",
-	},
-	{
-		.compatible = "mango, dm-pll-clock",
-		.data = &pll_clk_tables,
-	},
-	{
-		.compatible = "mango, dm-pll-child-clock",
-		.data = div_clk_tables,
-	},
-	{
-		.compatible = "mango, dm-pll-mux-clock",
-		.data = mux_clk_tables,
-	},
-	{
-		.compatible = "mango, dm-clk-default-rates",
-	},
-	{}
-};
+		cb_lsit->name = clk_hw_get_name(hw_p);
+		mux_id = ops->get_parent(hw);
+		if (mux_id > 1) {
+			ret = 1;
+			goto out;
+		}
+		ops->set_parent(hw, !mux_id);
+	} else if (event == POST_RATE_CHANGE) {
+		struct clk_hw *hw_p = clk_hw_get_parent(hw);
+
+		cb_lsit = list_first_entry_or_null(&mux_cb_clk_name_list,
+						typeof(*cb_lsit), node);
+		if (cb_lsit) {
+			const char *pre_name = cb_lsit->name;
+
+			list_del_init(&cb_lsit->node);
+			kfree(cb_lsit);
+			if (strcmp(clk_hw_get_name(hw_p), pre_name))
+				goto out;
+		}
+
+		ops->set_parent(hw, mux_id);
+	}
+
+out:
+	return notifier_from_errno(ret);
+}
+
+static int mango_clk_register_muxs(struct mango_clk_data *clk_data,
+				   struct mango_mux_clock mux_clks[],
+				   int num_mux_clks)
+{
+	struct clk_hw *hw;
+	struct mango_mux_clock *mux;
+	int i, ret = 0;
+
+	for (i = 0; i < num_mux_clks; i++) {
+		mux = &(mux_clks[i]);
+		
+		hw = clk_hw_register_mux(
+			NULL,
+			mux->name,
+			mux->parent_names,
+			mux->num_parents,
+			mux->flags,
+			clk_data->iobase + mux->offset_select,
+			mux->shift,
+			mux->width,
+			0,
+			&(clk_data->lock));
+		if (IS_ERR(hw)) {
+			pr_err("failed to register clock %s\n", mux->name);
+			ret = PTR_ERR(hw);
+			break;
+		}
+
+		dbg_info("registered [%d : %s]\n", mux->id, mux->name);
+		clk_data->onecell_data.hws[mux->id] = hw;
+
+		if (!(mux->flags & CLK_MUX_READ_ONLY)) {
+			struct clk_hw *parent;
+
+			/* set mux clock default parent here, it's parent index
+			 * value is read from the mux clock reg. dts can override
+			 * setting the mux clock parent later.
+			 */
+			parent = clk_hw_get_parent(hw);
+			clk_hw_set_parent(hw, parent);
+
+			mux->clk_nb.notifier_call = mango_mux_notifier_cb;
+			ret = clk_notifier_register(hw->clk, &(mux->clk_nb));
+			if (ret) {
+				pr_err("failed to register clock notifier for %s\n",
+					mux->name);
+				goto error_cleanup;
+			}
+		}
+	}
+
+	return 0;
+
+error_cleanup:
+	/* unregister notifier and release the memory allocated */
+	for (i = 0; i < num_mux_clks; i++) {
+		mux = &(mux_clks[i]);
+
+		struct clk_hw *hw = clk_data->onecell_data.hws[mux->id];
+
+		if (NULL != hw) {
+			clk_notifier_unregister(hw->clk, &(mux->clk_nb));
+		}
+	}
+
+	/* leave clk unregister to outside if failed */
+	return ret;
+}
+
+static int __init mango_clk_init_clk_data(
+	struct device_node *node,
+	int num_clks,
+	struct mango_clk_data **pp_clk_data)
+{
+	int ret = 0;
+	struct mango_clk_data *clk_data = NULL;
+	struct device_node *np_syscon;
+
+	np_syscon = of_parse_phandle(node, "system-ctrl", 0);
+	if (!np_syscon) {
+		pr_err("failed to get system-ctrl node\n");
+		ret = -EINVAL;
+		goto error_out;
+	}
+
+	clk_data = kzalloc(struct_size(clk_data, onecell_data.hws, num_clks), GFP_KERNEL);
+	if (!clk_data) {
+		ret = -ENOMEM;
+		goto error_out;
+	}
+
+	clk_data->syscon = device_node_to_regmap(np_syscon);
+	if (IS_ERR_OR_NULL(clk_data->syscon)) {
+		pr_err("cannot get regmap(syscon) %ld\n", PTR_ERR(clk_data->syscon));
+		ret = -ENODEV;
+		goto cleanup;
+	}
+	clk_data->iobase = of_iomap(np_syscon, 0);
+	spin_lock_init(&clk_data->lock);
+	clk_data->onecell_data.num = num_clks;
+
+	*pp_clk_data = clk_data;
+	return ret;
+
+cleanup:
+	kfree(clk_data);
+
+error_out:
+	return ret;
+}
 
 static void __init mango_clk_init(struct device_node *node)
 {
-	struct device_node *np_top;
 	struct mango_clk_data *clk_data = NULL;
-	const struct mango_clk_table *dev_data;
-	struct regmap *syscon;
-	void __iomem *base;
 	int i, ret = 0;
-	unsigned int id;
-	const char *clk_name;
-	const struct of_device_id *match = NULL;
+	int num_clks = 0;
 
-	clk_data = kzalloc(sizeof(*clk_data), GFP_KERNEL);
-	if (!clk_data) {
-		ret = -ENOMEM;
-		goto out;
-	}
-	match = of_match_node(mango_clk_match_ids_tables, node);
-	if (match) {
-		dev_data = (struct mango_clk_table *)match->data;
-	} else {
-		pr_err("%s did't match node data\n", __func__);
-		ret = -ENODEV;
-		goto no_match_data;
-	}
-
-	np_top = of_parse_phandle(node, "subctrl-syscon", 0);
-	if (!np_top) {
-		pr_err("%s can't get subctrl-syscon node\n",
-			__func__);
+	num_clks = ARRAY_SIZE(mango_pll_clks) +
+		   ARRAY_SIZE(mango_div_clks) +
+		   ARRAY_SIZE(mango_gate_clks) +
+		   ARRAY_SIZE(mango_mux_clks);
+	if (0 == num_clks) {
 		ret = -EINVAL;
-		goto no_match_data;
+		goto error_out;
 	}
 
-	syscon = device_node_to_regmap(np_top);
-	if (IS_ERR_OR_NULL(syscon)) {
-		pr_err("%s cannot get regmap %ld\n", __func__, PTR_ERR(syscon));
-		ret = -ENODEV;
-		goto no_match_data;
-	}
-	base = of_iomap(np_top, 0);
-
-	spin_lock_init(&clk_data->lock);
-	if (of_device_is_compatible(node, "mango, pll-clock") ||
-	    of_device_is_compatible(node, "mango, dm-pll-clock")) {
-		if (!dev_data->pll_clks_num) {
-			ret = -EINVAL;
-			goto no_match_data;
-		}
-
-		clk_data->table = dev_data;
-		clk_data->base = base;
-		clk_data->syscon_top = syscon;
-
-		if (of_property_read_string(node, "clock-output-names", &clk_name)) {
-			pr_err("%s cannot get pll name for %s\n",
-				__func__, node->full_name);
-			ret = -ENODEV;
-			goto no_match_data;
-		}
-		if (of_device_is_compatible(node, "mango, pll-clock"))
-			ret = mango_register_pll_clks(node, clk_data, clk_name);
-		else
-			ret = dm_mango_register_pll_clks(node, clk_data, clk_name);
+	ret = mango_clk_init_clk_data(node, num_clks, &clk_data);
+	if (ret < 0) {
+		goto error_out;
 	}
 
-	if (of_device_is_compatible(node, "mango, pll-child-clock") ||
-	    of_device_is_compatible(node, "mango, dm-pll-child-clock")) {
-		ret = of_property_read_u32(node, "id", &id);
-		if (ret) {
-			pr_err("not assigned id for %s\n", node->full_name);
-			ret = -ENODEV;
-			goto no_match_data;
-		}
-
-		/* Below brute-force to check dts property "id"
-		 * whether match id of array
-		 */
-		for (i = 0; i < ARRAY_SIZE(div_clk_tables); i++) {
-			if (id == dev_data[i].id)
-				break; /* found */
-		}
-		clk_data->table = &dev_data[i];
-		clk_data->base = base;
-		clk_data->syscon_top = syscon;
-		if (of_device_is_compatible(node, "mango, pll-child-clock"))
-			ret = mango_register_div_clks(node, clk_data);
-		else
-			ret = dm_mango_register_div_clks(node, clk_data);
+	ret = mango_clk_register_plls(clk_data, mango_pll_clks,
+				ARRAY_SIZE(mango_pll_clks));
+	if (ret) {
+		goto cleanup;
 	}
 
-	if (of_device_is_compatible(node, "mango, pll-mux-clock") ||
-	    of_device_is_compatible(node, "mango, dm-pll-mux-clock")) {
-		ret = of_property_read_u32(node, "id", &id);
-		if (ret) {
-			pr_err("not assigned id for %s\n", node->full_name);
-			ret = -ENODEV;
-			goto no_match_data;
-		}
-
-		/* Below brute-force to check dts property "id"
-		 * whether match id of array
-		 */
-		for (i = 0; i < ARRAY_SIZE(mux_clk_tables); i++) {
-			if (id == dev_data[i].id)
-				break; /* found */
-		}
-		clk_data->table = &dev_data[i];
-		clk_data->base = base;
-		clk_data->syscon_top = syscon;
-		if (of_device_is_compatible(node, "mango, pll-mux-clock"))
-			ret = mango_register_mux_clks(node, clk_data);
-		else
-			ret = dm_mango_register_mux_clks(node, clk_data);
+	ret = mango_clk_register_divs(clk_data, mango_div_clks,
+				ARRAY_SIZE(mango_div_clks));
+	if (ret) {
+		goto cleanup;
 	}
 
-	if (of_device_is_compatible(node, "mango, clk-default-rates"))
-		ret = set_default_clk_rates(node);
+	ret = mango_clk_register_gates(clk_data, mango_gate_clks,
+				ARRAY_SIZE(mango_gate_clks));
+	if (ret) {
+		goto cleanup;
+	}
 
-	if (of_device_is_compatible(node, "mango, dm-clk-default-rates"))
-		ret = dm_set_default_clk_rates(node);
+	ret = mango_clk_register_muxs(clk_data, mango_mux_clks,
+				ARRAY_SIZE(mango_mux_clks));
+	if (ret) {
+		goto cleanup;
+	}
 
-	if (!ret)
-		return;
+	for (i = 0; i < num_clks; i++) {
+		dbg_info("provider [%d]: %s\n", i, clk_hw_get_name(clk_data->onecell_data.hws[i]));
+	}
+	ret = of_clk_add_hw_provider(node, of_clk_hw_onecell_get, &clk_data->onecell_data);
+	if (ret) {
+		goto cleanup;
+	}
 
-no_match_data:
+	return;
+
+cleanup:
+	for (i = 0; i < num_clks; i++) {
+		if (NULL != clk_data->onecell_data.hws[i]) {
+			clk_hw_unregister(clk_data->onecell_data.hws[i]);
+		}
+	}
 	kfree(clk_data);
 
-out:
+error_out:
 	pr_err("%s failed error number %d\n", __func__, ret);
 }
 
-CLK_OF_DECLARE(mango_clk_pll, "mango, pll-clock", mango_clk_init);
-CLK_OF_DECLARE(mango_clk_pll_child, "mango, pll-child-clock", mango_clk_init);
-CLK_OF_DECLARE(mango_clk_pll_mux, "mango, pll-mux-clock", mango_clk_init);
-CLK_OF_DECLARE(mango_clk_default_rate, "mango, clk-default-rates", mango_clk_init);
-CLK_OF_DECLARE(dm_mango_clk_pll, "mango, dm-pll-clock", mango_clk_init);
-CLK_OF_DECLARE(dm_mango_clk_pll_child, "mango, dm-pll-child-clock", mango_clk_init);
-CLK_OF_DECLARE(dm_mango_clk_pll_mux, "mango, dm-pll-mux-clock", mango_clk_init);
-CLK_OF_DECLARE(dm_mango_clk_default_rate, "mango, dm-clk-default-rates", mango_clk_init);
+CLK_OF_DECLARE(mango_clk, "sophgo,sg2042-clock", mango_clk_init);

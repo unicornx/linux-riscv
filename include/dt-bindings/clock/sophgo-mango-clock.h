@@ -1,8 +1,6 @@
 #ifndef __SOPHGO_MANGO_CLOCK__
 #define __SOPHGO_MANGO_CLOCK__
 
-#include <dt-bindings/clock/sophgo.h>
-
 /*div clock*/
 #define DIV_CLK_MPLL_RP_CPU_NORMAL_0 0
 #define DIV_CLK_MPLL_AXI_DDR_0 1
@@ -153,10 +151,17 @@
 #define GATE_CLK_MP15 134
 
 /* MUX */
-#define MUX_CLK_DDR01 0
-#define MUX_CLK_DDR23 1
-#define MUX_CLK_RP_CPU_NORMAL 2
-#define MUX_CLK_AXI_DDR 3
+#define MUX_CLK_DDR01 135
+#define MUX_CLK_DDR23 136
+#define MUX_CLK_RP_CPU_NORMAL 137
+#define MUX_CLK_AXI_DDR 138
+
+//PLL ID
+#define MPLL_CLK	139
+#define FPLL_CLK	140
+#define DPLL0_CLK	141
+#define DPLL1_CLK	142
+
 
 #define S0_DIV_CLK_TABLE		0
 #define S1_DIV_CLK_TABLE		1
