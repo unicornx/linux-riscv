@@ -1,5 +1,4 @@
-CONFIG_SOC_SOPHGO_CLOCK_DUMMY = n
-ifeq ($(CONFIG_SOC_SOPHGO_CLOCK_DUMMY),y)
+ifeq ($(CONFIG_CLK_SOPHGO_SG2042_DUMMY),y)
 obj-$(CONFIG_SOC_SOPHGO)	+= clk-dummy.o
 else
 obj-$(CONFIG_SOC_SOPHGO)	+= clk.o
