@@ -342,7 +342,7 @@ static int register_gate_clks(struct device *dev, struct mango_clk_data *clk_dat
 	for (i = 0; i < clk_num; i++) {
 		clk = clk_register_gate(
 			dev, gate_clks[i].name, gate_clks[i].parent_name,
-			gate_clks[i].flags | CLK_IS_CRITICAL, base + gate_clks[i].offset,
+			gate_clks[i].flags, base + gate_clks[i].offset,
 			gate_clks[i].bit_idx, gate_clks[i].gate_flags,
 			&clk_data->lock);
 		if (IS_ERR(clk)) {
