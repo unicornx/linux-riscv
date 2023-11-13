@@ -134,12 +134,24 @@ struct mango_clk_data {
 	const struct mango_clk_table *table;
 };
 
-int mango_register_mux_clks
-(struct device_node *node, struct mango_clk_data *clk_data);
-int mango_register_div_clks
-(struct device_node *node, struct mango_clk_data *clk_data);
-int mango_register_pll_clks
-(struct device_node *node, struct mango_clk_data *clk_data, const char *clk_name);
-int set_default_clk_rates(struct device_node *node);
+/*
+ * @hw:		handle between common and hardware-specific interfaces
+ * @reg:	register containing divider
+ * @shift:	shift to the divider bit field
+ * @width:	width of the divider bit field
+ * @initial_val:initial value of the divider
+ * @table:	the div table that the divider supports
+ * @lock:	register lock
+ */
+struct mango_clk_divider {
+	struct clk_hw	hw;
+	void __iomem	*reg;
+	u8		shift;
+	u8		width;
+	u8		flags;
+	u32		initial_val;
+	const struct clk_div_table *table;
+	spinlock_t	*lock;
+};
 
 #endif
