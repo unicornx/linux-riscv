@@ -895,10 +895,7 @@ static void __init mango_clk_init(struct device_node *node)
 			ret = -ENODEV;
 			goto no_match_data;
 		}
-		if (of_device_is_compatible(node, "mango, pll-clock"))
-			ret = mango_register_pll_clks(node, clk_data, clk_name);
-		else
-			ret = dm_mango_register_pll_clks(node, clk_data, clk_name);
+		ret = mango_register_pll_clks(node, clk_data, clk_name);
 	}
 
 	if (of_device_is_compatible(node, "mango, pll-child-clock") ||
@@ -920,10 +917,7 @@ static void __init mango_clk_init(struct device_node *node)
 		clk_data->table = &dev_data[i];
 		clk_data->base = base;
 		clk_data->syscon_top = syscon;
-		if (of_device_is_compatible(node, "mango, pll-child-clock"))
-			ret = mango_register_div_clks(node, clk_data);
-		else
-			ret = dm_mango_register_div_clks(node, clk_data);
+		ret = mango_register_div_clks(node, clk_data);
 	}
 
 	if (of_device_is_compatible(node, "mango, pll-mux-clock") ||
@@ -945,17 +939,12 @@ static void __init mango_clk_init(struct device_node *node)
 		clk_data->table = &dev_data[i];
 		clk_data->base = base;
 		clk_data->syscon_top = syscon;
-		if (of_device_is_compatible(node, "mango, pll-mux-clock"))
-			ret = mango_register_mux_clks(node, clk_data);
-		else
-			ret = dm_mango_register_mux_clks(node, clk_data);
+		ret = mango_register_mux_clks(node, clk_data);
 	}
 
-	if (of_device_is_compatible(node, "mango, clk-default-rates"))
+	if (of_device_is_compatible(node, "mango, clk-default-rates") ||
+	    of_device_is_compatible(node, "mango, dm-clk-default-rates"))
 		ret = set_default_clk_rates(node);
-
-	if (of_device_is_compatible(node, "mango, dm-clk-default-rates"))
-		ret = dm_set_default_clk_rates(node);
 
 	if (!ret)
 		return;

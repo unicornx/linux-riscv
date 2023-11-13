@@ -142,11 +142,4 @@ int mango_register_pll_clks
 (struct device_node *node, struct mango_clk_data *clk_data, const char *clk_name);
 int set_default_clk_rates(struct device_node *node);
 
-int dm_mango_register_mux_clks
-(struct device_node *node, struct mango_clk_data *clk_data);
-int dm_mango_register_div_clks
-(struct device_node *node, struct mango_clk_data *clk_data);
-int dm_mango_register_pll_clks
-(struct device_node *node, struct mango_clk_data *clk_data, const char *name);
-int dm_set_default_clk_rates(struct device_node *node);
 #endif

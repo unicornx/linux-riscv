@@ -145,25 +145,25 @@ static int mango_clk_pll_set_rate(struct clk_hw *hw, unsigned long rate,
 	return 0;
 }
 
-const struct clk_ops dm_mango_clk_divider_ops = {
+const struct clk_ops mango_clk_divider_ops = {
 	.recalc_rate = mango_clk_divider_recalc_rate,
 	.round_rate = mango_clk_divider_round_rate,
 	.set_rate = mango_clk_divider_set_rate,
 };
 
-const struct clk_ops dm_mango_clk_divider_ro_ops = {
+const struct clk_ops mango_clk_divider_ro_ops = {
 	.recalc_rate = mango_clk_divider_recalc_rate,
 	.round_rate = mango_clk_divider_round_rate,
 };
 
-const struct clk_ops dm_mango_clk_pll_ops = {
+const struct clk_ops mango_clk_pll_ops = {
 	.recalc_rate = mango_clk_pll_recalc_rate,
 	.round_rate = mango_clk_pll_round_rate,
 	.determine_rate = mango_clk_pll_determine_rate,
 	.set_rate = mango_clk_pll_set_rate,
 };
 
-const struct clk_ops dm_mango_clk_pll_ro_ops = {
+const struct clk_ops mango_clk_pll_ro_ops = {
 	.recalc_rate = mango_clk_pll_recalc_rate,
 	.round_rate = mango_clk_pll_round_rate,
 };
@@ -225,7 +225,7 @@ out:
 	return notifier_from_errno(ret);
 }
 
-int dm_set_default_clk_rates(struct device_node *node)
+int set_default_clk_rates(struct device_node *node)
 {
 	struct of_phandle_args clkspec;
 	struct property *prop;
@@ -294,9 +294,9 @@ static struct clk *__register_divider_clks(struct device *dev, const char *name,
 
 	init.name = name;
 	if (clk_divider_flags & CLK_DIVIDER_READ_ONLY)
-		init.ops = &dm_mango_clk_divider_ro_ops;
+		init.ops = &mango_clk_divider_ro_ops;
 	else
-		init.ops = &dm_mango_clk_divider_ops;
+		init.ops = &mango_clk_divider_ops;
 	init.flags = flags;
 	init.parent_names = (parent_name ? &parent_name : NULL);
 	init.num_parents = (parent_name ? 1 : 0);
@@ -486,7 +486,7 @@ err:
 }
 
 /* pll clock init */
-int dm_mango_register_pll_clks(struct device_node *node,
+int mango_register_pll_clks(struct device_node *node,
 			 struct mango_clk_data *clk_data, const char *clk_name)
 {
 	struct clk *clk = NULL;
@@ -504,9 +504,9 @@ int dm_mango_register_pll_clks(struct device_node *node,
 			pll_clks[i].syscon_top = clk_data->syscon_top;
 			pll_clks[i].lock = &clk_data->lock;
 			if (pll_clks[i].ini_flags & MANGO_CLK_RO)
-				local_ops = &dm_mango_clk_pll_ro_ops;
+				local_ops = &mango_clk_pll_ro_ops;
 			else
-				local_ops = &dm_mango_clk_pll_ops;
+				local_ops = &mango_clk_pll_ops;
 			clk = clk_register_composite(
 				NULL, pll_clks[i].name, &pll_clks[i].parent_name,
 				1, NULL, NULL, &pll_clks[i].hw, local_ops,
@@ -531,7 +531,7 @@ out:
 }
 
 /* mux clk init */
-int dm_mango_register_mux_clks(struct device_node *node, struct mango_clk_data *clk_data)
+int mango_register_mux_clks(struct device_node *node, struct mango_clk_data *clk_data)
 {
 	int ret;
 	int count;
@@ -564,7 +564,7 @@ err:
 }
 
 /* pll divider init */
-int dm_mango_register_div_clks(struct device_node *node, struct mango_clk_data *clk_data)
+int mango_register_div_clks(struct device_node *node, struct mango_clk_data *clk_data)
 {
 	int ret;
 	int count;
