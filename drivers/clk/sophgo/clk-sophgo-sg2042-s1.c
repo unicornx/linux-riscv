@@ -543,23 +543,38 @@ static struct sg2042_pll_clock sg2042_pll_clks[] = {
 
 #define DEF_DIVFLAG (CLK_DIVIDER_ONE_BASED | CLK_DIVIDER_ALLOW_ZERO)
 static struct sg2042_divider_clock sg2042_div_clks[] = {
-	SG2042_DIV(DIV_CLK_MPLL_RP_CPU_NORMAL_0,
-		"clk_div_rp_cpu_normal_0", "clk_gate_rp_cpu_normal_div0",
-		R_CLKDIVREG1, 16, 5, DEF_DIVFLAG, 0),
-	SG2042_DIV(DIV_CLK_MPLL_AXI_DDR_0,
-		"clk_div_axi_ddr_0", "clk_gate_axi_ddr_div0",
-		R_CLKDIVREG26, 16, 5, DEF_DIVFLAG, 5),
+	SG2042_DIV_RO(DIV_CLK_DPLL0_DDR01_0,
+		"clk_div_ddr01_0", "clk_gate_ddr01_div0",
+		R_CLKDIVREG27, 16, 5,
+		DEF_DIVFLAG | CLK_DIVIDER_READ_ONLY, -1),
 	SG2042_DIV_RO(DIV_CLK_FPLL_DDR01_1,
 		"clk_div_ddr01_1", "clk_gate_ddr01_div1",
 		R_CLKDIVREG28, 16, 5,
+		DEF_DIVFLAG | CLK_DIVIDER_READ_ONLY, -1),
+
+	SG2042_DIV_RO(DIV_CLK_DPLL1_DDR23_0,
+		"clk_div_ddr23_0", "clk_gate_ddr23_div0",
+		R_CLKDIVREG29, 16, 5,
 		DEF_DIVFLAG | CLK_DIVIDER_READ_ONLY, -1),
 	SG2042_DIV_RO(DIV_CLK_FPLL_DDR23_1,
 		"clk_div_ddr23_1", "clk_gate_ddr23_div1",
 		R_CLKDIVREG30, 16, 5,
 		DEF_DIVFLAG | CLK_DIVIDER_READ_ONLY, -1),
+
+	SG2042_DIV(DIV_CLK_MPLL_RP_CPU_NORMAL_0,
+		"clk_div_rp_cpu_normal_0", "clk_gate_rp_cpu_normal_div0",
+		R_CLKDIVREG0, 16, 5, DEF_DIVFLAG, 0),
 	SG2042_DIV(DIV_CLK_FPLL_RP_CPU_NORMAL_1,
 		"clk_div_rp_cpu_normal_1", "clk_gate_rp_cpu_normal_div1",
-		R_CLKDIVREG0, 16, 5, DEF_DIVFLAG, 0),
+		R_CLKDIVREG1, 16, 5, DEF_DIVFLAG, 0),
+	
+	SG2042_DIV(DIV_CLK_MPLL_AXI_DDR_0,
+		"clk_div_axi_ddr_0", "clk_gate_axi_ddr_div0",
+		R_CLKDIVREG25, 16, 5, DEF_DIVFLAG, 5),
+	SG2042_DIV(DIV_CLK_FPLL_AXI_DDR_1,
+		"clk_div_axi_ddr_1", "clk_gate_axi_ddr_div1",
+		R_CLKDIVREG26, 16, 5, DEF_DIVFLAG, 5),
+
 	SG2042_DIV(DIV_CLK_FPLL_50M_A53, "clk_div_50m_a53", "fpll_clock",
 		R_CLKDIVREG2, 16, 8, DEF_DIVFLAG, 0),
 	SG2042_DIV(DIV_CLK_FPLL_TOP_RP_CMN_DIV2,
@@ -588,9 +603,6 @@ static struct sg2042_divider_clock sg2042_div_clks[] = {
 	SG2042_DIV(DIV_CLK_FPLL_TOP_AXI_HSPERI,
 		"clk_div_top_axi_hsperi", "fpll_clock",
 		R_CLKDIVREG24, 16, 5, DEF_DIVFLAG, 0),
-	SG2042_DIV(DIV_CLK_FPLL_AXI_DDR_1,
-		"clk_div_axi_ddr_1", "clk_gate_axi_ddr_div1",
-		R_CLKDIVREG25, 16, 5, DEF_DIVFLAG, 5),
 	SG2042_DIV(DIV_CLK_FPLL_DIV_TIMER1, "clk_div_timer1", "clk_div_50m_a53",
 		R_CLKDIVREG6, 16, 16, DEF_DIVFLAG, 0),
 	SG2042_DIV(DIV_CLK_FPLL_DIV_TIMER2, "clk_div_timer2", "clk_div_50m_a53",
@@ -613,12 +625,6 @@ static struct sg2042_divider_clock sg2042_div_clks[] = {
 		R_CLKDIVREG22, 16, 16, DEF_DIVFLAG, 0),
 	SG2042_DIV(DIV_CLK_FPLL_GPIO_DB, "clk_div_gpio_db", "clk_div_top_axi0",
 		R_CLKDIVREG15, 16, 16, DEF_DIVFLAG, 0),
-	SG2042_DIV_RO(DIV_CLK_DPLL0_DDR01_0, "clk_div_ddr01_0", "clk_gate_ddr01_div0",
-		R_CLKDIVREG27, 16, 5,
-		DEF_DIVFLAG | CLK_DIVIDER_READ_ONLY, -1),
-	SG2042_DIV_RO(DIV_CLK_DPLL1_DDR23_0, "clk_div_ddr23_0", "clk_gate_ddr23_div0",
-		R_CLKDIVREG29, 16, 5,
-		DEF_DIVFLAG | CLK_DIVIDER_READ_ONLY, -1),
 };
 
 #define SG2042_GATE(_id, _name, _parent_name, _flags, _r_enable, _bit_idx) { \
@@ -631,33 +637,34 @@ static struct sg2042_divider_clock sg2042_div_clks[] = {
 	}
 
 static const struct sg2042_gate_clock sg2042_gate_clks[] = {
+	SG2042_GATE(GATE_CLK_DDR01_DIV0, "clk_gate_ddr01_div0", "dpll0_clock",
+		CLK_SET_RATE_PARENT | CLK_IGNORE_UNUSED,
+		R_CLKDIVREG27, 4),
+	SG2042_GATE(GATE_CLK_DDR01_DIV1, "clk_gate_ddr01_div1", "fpll_clock",
+		CLK_IGNORE_UNUSED | CLK_IS_CRITICAL,
+		R_CLKDIVREG28, 4),
+
+	SG2042_GATE(GATE_CLK_DDR23_DIV0, "clk_gate_ddr23_div0", "dpll1_clock",
+		CLK_SET_RATE_PARENT | CLK_IGNORE_UNUSED,
+		R_CLKDIVREG29, 4),
+	SG2042_GATE(GATE_CLK_DDR23_DIV1, "clk_gate_ddr23_div1", "fpll_clock",
+		CLK_IGNORE_UNUSED | CLK_IS_CRITICAL,
+		R_CLKDIVREG30, 4),
+
+	SG2042_GATE(GATE_CLK_RP_CPU_NORMAL_DIV0, "clk_gate_rp_cpu_normal_div0", "mpll_clock",
+		CLK_SET_RATE_PARENT | CLK_IGNORE_UNUSED | CLK_IS_CRITICAL,
+		R_CLKDIVREG0, 4),
 	SG2042_GATE(GATE_CLK_RP_CPU_NORMAL_DIV1,
-		"clk_gate_rp_cpu_normal_div1", "mpll_clock",
-		CLK_SET_RATE_PARENT | CLK_IGNORE_UNUSED | CLK_IS_CRITICAL,
-		R_CLKENREG0, 0),
+		"clk_gate_rp_cpu_normal_div1", "fpll_clock",
+		CLK_IGNORE_UNUSED | CLK_IS_CRITICAL,
+		R_CLKDIVREG1, 4),
 
-	SG2042_GATE(GATE_CLK_AXI_DDR_DIV1, "clk_gate_axi_ddr_div1", "mpll_clock",
+	SG2042_GATE(GATE_CLK_AXI_DDR_DIV0, "clk_gate_axi_ddr_div0", "mpll_clock",
 		CLK_SET_RATE_PARENT | CLK_IGNORE_UNUSED | CLK_IS_CRITICAL,
-		R_CLKENREG1, 13),
-	SG2042_GATE(GATE_CLK_DDR01_DIV0, "clk_gate_ddr01_div0", "fpll_clock",
+		R_CLKDIVREG25, 4),
+	SG2042_GATE(GATE_CLK_AXI_DDR_DIV1, "clk_gate_axi_ddr_div1", "fpll_clock",
 		CLK_IGNORE_UNUSED | CLK_IS_CRITICAL,
-		R_CLKENREG1, 14),
-	SG2042_GATE(GATE_CLK_DDR23_DIV0, "clk_gate_ddr23_div0", "fpll_clock",
-		CLK_IGNORE_UNUSED | CLK_IS_CRITICAL,
-		R_CLKENREG1, 15),
-
-	SG2042_GATE(GATE_CLK_RP_CPU_NORMAL_DIV0, "clk_gate_rp_cpu_normal_div0", "fpll_clock",
-		CLK_IGNORE_UNUSED | CLK_IS_CRITICAL,
-		R_CLKENREG0, 0),
-	SG2042_GATE(GATE_CLK_AXI_DDR_DIV0, "clk_gate_axi_ddr_div0", "fpll_clock",
-		CLK_IGNORE_UNUSED | CLK_IS_CRITICAL,
-		R_CLKENREG1, 13),
-	SG2042_GATE(GATE_CLK_DDR01_DIV1, "clk_gate_ddr01_div1", "dpll0_clock",
-		CLK_SET_RATE_PARENT | CLK_IGNORE_UNUSED,
-		R_CLKENREG1, 14),
-	SG2042_GATE(GATE_CLK_DDR23_DIV1, "clk_gate_ddr23_div1", "dpll1_clock",
-		CLK_SET_RATE_PARENT | CLK_IGNORE_UNUSED,
-		R_CLKENREG1, 15),
+		R_CLKDIVREG26, 4),
 
 	SG2042_GATE(GATE_CLK_A53_50M, "clk_gate_a53_50m", "clk_div_50m_a53",
 		CLK_SET_RATE_PARENT | CLK_IGNORE_UNUSED, R_CLKENREG0, 1),
@@ -889,6 +896,27 @@ static const struct sg2042_gate_clock sg2042_gate_clks[] = {
 		.width = _width,				\
 	}
 
+/*
+ * Note: regarding names for mux clock, "0/1" or "div0/div1" means the
+ * first/second parent input source, not the register value.
+ * For example:
+ * "clk_div_ddr01_0" is the name of Clock divider 0 control of DDR01, and
+ * "clk_gate_ddr01_div0" is the gate clock in front of the "clk_div_ddr01_0",
+ * they are both controlled by register CLKDIVREG27;
+ * "clk_div_ddr01_1" is the name of Clock divider 1 control of DDR01, and
+ * "clk_gate_ddr01_div1" is the gate clock in front of the "clk_div_ddr01_1",
+ * they are both controlled by register CLKDIVREG28;
+ * While for register value of mux selection, use Clock Select for DDR01’s clock
+ * as example, see CLKSELREG0, bit[2].
+ * 1: Select in_dpll0_clk as clock source, correspondng to the parent input
+ *    source from "clk_div_ddr01_0".
+ * 0: Select in_fpll_clk as clock source, corresponding to the parent input
+ *    source from "clk_div_ddr01_1".
+ * So we need a table to define the array of register values corresponding to
+ * the parent index and tell CCF about this when registering mux clock.
+ */
+static const u32 sg2042_mux_table[] = {1, 0};
+
 static const char *const clk_mux_ddr01_p[] = {
 			"s1_clk_div_ddr01_0", "s1_clk_div_ddr01_1"};
 static const char *const clk_mux_ddr23_p[] = {
@@ -1042,55 +1070,33 @@ struct mux_cb_clk_name {
 	struct list_head node;
 };
 
-static struct list_head mux_cb_clk_name_list =
-	LIST_HEAD_INIT(mux_cb_clk_name_list);
 static int sg2042_mux_notifier_cb(struct notifier_block *nb,
 				unsigned long event, void *data)
 {
 	int ret = 0;
-	static unsigned char mux_id = 1;
 	struct clk_notifier_data *ndata = data;
 	struct clk_hw *hw = __clk_get_hw(ndata->clk);
 	const struct clk_ops *ops = &clk_mux_ops;
-	struct mux_cb_clk_name *cb_lsit;
+	struct sg2042_mux_clock *mux = to_sg2042_mux_nb(nb);
 
 	if (event == PRE_RATE_CHANGE) {
-		struct clk_hw *hw_p = clk_hw_get_parent(hw);
-
-		cb_lsit = kmalloc(sizeof(*cb_lsit), GFP_KERNEL);
-		if (cb_lsit) {
-			INIT_LIST_HEAD(&cb_lsit->node);
-			list_add_tail(&cb_lsit->node, &mux_cb_clk_name_list);
-		} else {
-			pr_err("mux cb kmalloc mem fail\n");
-			goto out;
-		}
-
-		cb_lsit->name = clk_hw_get_name(hw_p);
-		mux_id = ops->get_parent(hw);
-		if (mux_id > 1) {
-			ret = 1;
-			goto out;
-		}
-		ops->set_parent(hw, !mux_id);
+		mux->original_index = ops->get_parent(hw);
+		dbg_info("%s: switch parent from %d to 1\n",
+			clk_hw_get_name(hw), mux->original_index);
+		/*
+		 * "1" is the array index of the second parent input source of
+		 * mux. For SG2042, it's fpll for all mux clocks.
+		 * FIXME, any good idea to avoid magic number?
+		 */
+		ret = ops->set_parent(hw, 1);
 	} else if (event == POST_RATE_CHANGE) {
-		struct clk_hw *hw_p = clk_hw_get_parent(hw);
-
-		cb_lsit = list_first_entry_or_null(&mux_cb_clk_name_list,
-						typeof(*cb_lsit), node);
-		if (cb_lsit) {
-			const char *pre_name = cb_lsit->name;
-
-			list_del_init(&cb_lsit->node);
-			kfree(cb_lsit);
-			if (strcmp(clk_hw_get_name(hw_p), pre_name))
-				goto out;
-		}
-
-		ops->set_parent(hw, mux_id);
+		dbg_info("%s: switch parent from %d to %d\n",
+			clk_hw_get_name(hw),
+			ops->get_parent(hw),
+			mux->original_index);
+		ret = ops->set_parent(hw, mux->original_index);
 	}
 
-out:
 	return notifier_from_errno(ret);
 }
 
@@ -1105,7 +1111,7 @@ static int sg2042_clk_register_muxs(struct sg2042_clk_data *clk_data,
 	for (i = 0; i < num_mux_clks; i++) {
 		mux = &(mux_clks[i]);
 
-		hw = clk_hw_register_mux(
+		hw = clk_hw_register_mux_table(
 			NULL,
 			mux->name,
 			mux->parent_names,
@@ -1113,8 +1119,9 @@ static int sg2042_clk_register_muxs(struct sg2042_clk_data *clk_data,
 			mux->flags,
 			clk_data->iobase + mux->offset_select,
 			mux->shift,
-			mux->width,
+			BIT(mux->width) - 1,
 			0,
+			sg2042_mux_table,
 			&sg2042_clk_lock);
 		if (IS_ERR(hw)) {
 			pr_err("failed to register clock %s\n", mux->name);
@@ -1125,16 +1132,13 @@ static int sg2042_clk_register_muxs(struct sg2042_clk_data *clk_data,
 		dbg_info("registered [%d : %s]\n", mux->id, mux->name);
 		clk_data->onecell_data.hws[mux->id] = hw;
 
+		/*
+		 * FIXME: Theoretically, we should set parent for the
+		 * mux, but seems hardware has done this for us with
+		 * default value, so we don't set parent again here.
+		 */
+
 		if (!(mux->flags & CLK_MUX_READ_ONLY)) {
-			struct clk_hw *parent;
-
-			/* set mux clock default parent here, it's parent index
-			 * value is read from the mux clock reg. dts can override
-			 * setting the mux clock parent later.
-			 */
-			parent = clk_hw_get_parent(hw);
-			clk_hw_set_parent(hw, parent);
-
 			mux->clk_nb.notifier_call = sg2042_mux_notifier_cb;
 			ret = clk_notifier_register(hw->clk, &(mux->clk_nb));
 			if (ret) {
