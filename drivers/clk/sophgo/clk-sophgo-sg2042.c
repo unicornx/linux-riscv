@@ -541,6 +541,10 @@ static struct sg2042_pll_clock sg2042_pll_clks[] = {
 		.table = NULL,						\
 	}
 
+/*
+ * DIV items in the array are sorted according to the clock-tree diagram,
+ * from top to bottom, from upstream to downstream. Read TRM for details.
+ */
 #define DEF_DIVFLAG (CLK_DIVIDER_ONE_BASED | CLK_DIVIDER_ALLOW_ZERO)
 static struct sg2042_divider_clock sg2042_div_clks[] = {
 	SG2042_DIV_RO(DIV_CLK_DPLL0_DDR01_0,
@@ -575,11 +579,30 @@ static struct sg2042_divider_clock sg2042_div_clks[] = {
 		"clk_div_axi_ddr_1", "clk_gate_axi_ddr_div1",
 		R_CLKDIVREG26, 16, 5, DEF_DIVFLAG, 5),
 
-	SG2042_DIV(DIV_CLK_FPLL_50M_A53, "clk_div_50m_a53", "fpll_clock",
-		R_CLKDIVREG2, 16, 8, DEF_DIVFLAG, 0),
 	SG2042_DIV(DIV_CLK_FPLL_TOP_RP_CMN_DIV2,
 		"clk_div_top_rp_cmn_div2", "clk_mux_rp_cpu_normal",
 		R_CLKDIVREG3, 16, 16, DEF_DIVFLAG, 0),
+
+	SG2042_DIV(DIV_CLK_FPLL_50M_A53, "clk_div_50m_a53", "fpll_clock",
+		R_CLKDIVREG2, 16, 8, DEF_DIVFLAG, 0),
+	/* downstream of div_50m_a53 */
+	SG2042_DIV(DIV_CLK_FPLL_DIV_TIMER1, "clk_div_timer1", "clk_div_50m_a53",
+		R_CLKDIVREG6, 16, 16, DEF_DIVFLAG, 0),
+	SG2042_DIV(DIV_CLK_FPLL_DIV_TIMER2, "clk_div_timer2", "clk_div_50m_a53",
+		R_CLKDIVREG7, 16, 16, DEF_DIVFLAG, 0),
+	SG2042_DIV(DIV_CLK_FPLL_DIV_TIMER3, "clk_div_timer3", "clk_div_50m_a53",
+		R_CLKDIVREG8, 16, 16, DEF_DIVFLAG, 0),
+	SG2042_DIV(DIV_CLK_FPLL_DIV_TIMER4, "clk_div_timer4", "clk_div_50m_a53",
+		R_CLKDIVREG9, 16, 16, DEF_DIVFLAG, 0),
+	SG2042_DIV(DIV_CLK_FPLL_DIV_TIMER5, "clk_div_timer5", "clk_div_50m_a53",
+		R_CLKDIVREG10, 16, 16, DEF_DIVFLAG, 0),
+	SG2042_DIV(DIV_CLK_FPLL_DIV_TIMER6, "clk_div_timer6", "clk_div_50m_a53",
+		R_CLKDIVREG11, 16, 16, DEF_DIVFLAG, 0),
+	SG2042_DIV(DIV_CLK_FPLL_DIV_TIMER7, "clk_div_timer7", "clk_div_50m_a53",
+		R_CLKDIVREG12, 16, 16, DEF_DIVFLAG, 0),
+	SG2042_DIV(DIV_CLK_FPLL_DIV_TIMER8, "clk_div_timer8", "clk_div_50m_a53",
+		R_CLKDIVREG13, 16, 16, DEF_DIVFLAG, 0),
+
 	SG2042_DIV_RO(DIV_CLK_FPLL_UART_500M, "clk_div_uart_500m", "fpll_clock",
 		R_CLKDIVREG4, 16, 7,
 		CLK_DIVIDER_READ_ONLY, 0),
@@ -598,33 +621,20 @@ static struct sg2042_divider_clock sg2042_div_clks[] = {
 		R_CLKDIVREG19, 16, 5, DEF_DIVFLAG, 0),
 	SG2042_DIV(DIV_CLK_FPLL_SD, "clk_div_sd", "fpll_clock",
 		R_CLKDIVREG21, 16, 5, DEF_DIVFLAG, 0),
+
 	SG2042_DIV(DIV_CLK_FPLL_TOP_AXI0, "clk_div_top_axi0", "fpll_clock",
 		R_CLKDIVREG23, 16, 5, DEF_DIVFLAG, 0),
-	SG2042_DIV(DIV_CLK_FPLL_TOP_AXI_HSPERI,
-		"clk_div_top_axi_hsperi", "fpll_clock",
-		R_CLKDIVREG24, 16, 5, DEF_DIVFLAG, 0),
-	SG2042_DIV(DIV_CLK_FPLL_DIV_TIMER1, "clk_div_timer1", "clk_div_50m_a53",
-		R_CLKDIVREG6, 16, 16, DEF_DIVFLAG, 0),
-	SG2042_DIV(DIV_CLK_FPLL_DIV_TIMER2, "clk_div_timer2", "clk_div_50m_a53",
-		R_CLKDIVREG7, 16, 16, DEF_DIVFLAG, 0),
-	SG2042_DIV(DIV_CLK_FPLL_DIV_TIMER3, "clk_div_timer3", "clk_div_50m_a53",
-		R_CLKDIVREG8, 16, 16, DEF_DIVFLAG, 0),
-	SG2042_DIV(DIV_CLK_FPLL_DIV_TIMER4, "clk_div_timer4", "clk_div_50m_a53",
-		R_CLKDIVREG9, 16, 16, DEF_DIVFLAG, 0),
-	SG2042_DIV(DIV_CLK_FPLL_DIV_TIMER5, "clk_div_timer5", "clk_div_50m_a53",
-		R_CLKDIVREG10, 16, 16, DEF_DIVFLAG, 0),
-	SG2042_DIV(DIV_CLK_FPLL_DIV_TIMER6, "clk_div_timer6", "clk_div_50m_a53",
-		R_CLKDIVREG11, 16, 16, DEF_DIVFLAG, 0),
-	SG2042_DIV(DIV_CLK_FPLL_DIV_TIMER7, "clk_div_timer7", "clk_div_50m_a53",
-		R_CLKDIVREG12, 16, 16, DEF_DIVFLAG, 0),
-	SG2042_DIV(DIV_CLK_FPLL_DIV_TIMER8, "clk_div_timer8", "clk_div_50m_a53",
-		R_CLKDIVREG13, 16, 16, DEF_DIVFLAG, 0),
+	/* downstream of div_top_axi0 */
 	SG2042_DIV(DIV_CLK_FPLL_100K_EMMC, "clk_div_100k_emmc", "clk_div_top_axi0",
 		R_CLKDIVREG20, 16, 16, DEF_DIVFLAG, 0),
 	SG2042_DIV(DIV_CLK_FPLL_100K_SD, "clk_div_100k_sd", "clk_div_top_axi0",
 		R_CLKDIVREG22, 16, 16, DEF_DIVFLAG, 0),
 	SG2042_DIV(DIV_CLK_FPLL_GPIO_DB, "clk_div_gpio_db", "clk_div_top_axi0",
 		R_CLKDIVREG15, 16, 16, DEF_DIVFLAG, 0),
+
+	SG2042_DIV(DIV_CLK_FPLL_TOP_AXI_HSPERI,
+		"clk_div_top_axi_hsperi", "fpll_clock",
+		R_CLKDIVREG24, 16, 5, DEF_DIVFLAG, 0),
 };
 
 #define SG2042_GATE(_id, _name, _parent_name, _flags, _r_enable, _bit_idx) { \
@@ -636,6 +646,10 @@ static struct sg2042_divider_clock sg2042_div_clks[] = {
 		.bit_idx = _bit_idx,		\
 	}
 
+/*
+ * GATE items in the array are sorted according to the clock-tree diagram,
+ * from top to bottom, from upstream to downstream. Read TRM for details.
+ */
 static const struct sg2042_gate_clock sg2042_gate_clks[] = {
 	SG2042_GATE(GATE_CLK_DDR01_DIV0, "clk_gate_ddr01_div0", "dpll0_clock",
 		CLK_SET_RATE_PARENT | CLK_IGNORE_UNUSED,
@@ -666,24 +680,78 @@ static const struct sg2042_gate_clock sg2042_gate_clks[] = {
 		CLK_IGNORE_UNUSED | CLK_IS_CRITICAL,
 		R_CLKDIVREG26, 4),
 
-	SG2042_GATE(GATE_CLK_A53_50M, "clk_gate_a53_50m", "clk_div_50m_a53",
-		CLK_SET_RATE_PARENT | CLK_IGNORE_UNUSED, R_CLKENREG0, 1),
+	/* upon are gate clocks as input source for the muxes */
+
+	SG2042_GATE(GATE_CLK_DDR01, "clk_gate_ddr01", "clk_mux_ddr01",
+		CLK_SET_RATE_PARENT | CLK_IGNORE_UNUSED | CLK_IS_CRITICAL,
+		R_CLKENREG1, 14),
+
+	SG2042_GATE(GATE_CLK_DDR23, "clk_gate_ddr23", "clk_mux_ddr23",
+		CLK_SET_RATE_PARENT | CLK_IGNORE_UNUSED | CLK_IS_CRITICAL,
+		R_CLKENREG1, 15),
+
+	SG2042_GATE(GATE_CLK_RP_CPU_NORMAL,
+		"clk_gate_rp_cpu_normal", "clk_mux_rp_cpu_normal",
+		CLK_SET_RATE_PARENT | CLK_IGNORE_UNUSED | CLK_IS_CRITICAL,
+		R_CLKENREG0, 0),
+
+	SG2042_GATE(GATE_CLK_AXI_DDR, "clk_gate_axi_ddr", "clk_mux_axi_ddr",
+		CLK_SET_RATE_PARENT | CLK_IGNORE_UNUSED | CLK_IS_CRITICAL,
+		R_CLKENREG1, 13),
+
+	/* upon are gate clocks directly downstream of muxes */
+
+	/* downstream of clk_div_top_rp_cmn_div2, FIXME */
 	SG2042_GATE(GATE_CLK_TOP_RP_CMN_DIV2,
 		"clk_gate_top_rp_cmn_div2", "clk_gate_rp_cpu_normal",
 		CLK_SET_RATE_PARENT | CLK_IGNORE_UNUSED, R_CLKENREG0, 2),
+	SG2042_GATE(GATE_CLK_HSDMA, "clk_gate_hsdma", "clk_gate_top_rp_cmn_div2",
+		CLK_SET_RATE_PARENT, R_CLKENREG1, 10),
+
+	/*
+	 * downstream of clk_gate_rp_cpu_normal
+	 *
+	 * FIXME: there should be one 1/2 DIV between clk_gate_rp_cpu_normal
+	 * and clk_gate_axi_pcie0/clk_gate_axi_pcie1.
+	 * But the 1/2 DIV is fixed and no configurable register exported, so
+	 * when reading from these two clocks, the rate value are still the
+	 * same as that of clk_gate_rp_cpu_normal, it's not correct.
+	 * This just affects the value read.
+	 */
 	SG2042_GATE(GATE_CLK_AXI_PCIE0,
 		"clk_gate_axi_pcie0", "clk_gate_rp_cpu_normal",
 		CLK_SET_RATE_PARENT | CLK_IGNORE_UNUSED, R_CLKENREG1, 8),
 	SG2042_GATE(GATE_CLK_AXI_PCIE1,
 		"clk_gate_axi_pcie1", "clk_gate_rp_cpu_normal",
 		CLK_SET_RATE_PARENT | CLK_IGNORE_UNUSED, R_CLKENREG1, 9),
-	SG2042_GATE(GATE_CLK_HSDMA, "clk_gate_hsdma", "clk_gate_top_rp_cmn_div2",
-		CLK_SET_RATE_PARENT, R_CLKENREG1, 10),
 
-	SG2042_GATE(GATE_CLK_EMMC_100M, "clk_gate_emmc", "clk_div_emmc",
-		CLK_SET_RATE_PARENT, R_CLKENREG1, 3),
-	SG2042_GATE(GATE_CLK_SD_100M, "clk_gate_sd", "clk_div_sd",
-		CLK_SET_RATE_PARENT, R_CLKENREG1, 6),
+	/* downstream of div_50m_a53 */
+	SG2042_GATE(GATE_CLK_A53_50M, "clk_gate_a53_50m", "clk_div_50m_a53",
+		CLK_SET_RATE_PARENT | CLK_IGNORE_UNUSED, R_CLKENREG0, 1),
+	SG2042_GATE(GATE_CLK_TIMER1, "clk_gate_timer1", "clk_div_timer1",
+		CLK_SET_RATE_PARENT, R_CLKENREG0, 12),
+	SG2042_GATE(GATE_CLK_TIMER2, "clk_gate_timer2", "clk_div_timer2",
+		CLK_SET_RATE_PARENT, R_CLKENREG0, 13),
+	SG2042_GATE(GATE_CLK_TIMER3, "clk_gate_timer3", "clk_div_timer3",
+		CLK_SET_RATE_PARENT, R_CLKENREG0, 14),
+	SG2042_GATE(GATE_CLK_TIMER4, "clk_gate_timer4", "clk_div_timer4",
+		CLK_SET_RATE_PARENT, R_CLKENREG0, 15),
+	SG2042_GATE(GATE_CLK_TIMER5, "clk_gate_timer5", "clk_div_timer5",
+		CLK_SET_RATE_PARENT, R_CLKENREG0, 16),
+	SG2042_GATE(GATE_CLK_TIMER6, "clk_gate_timer6", "clk_div_timer6",
+		CLK_SET_RATE_PARENT, R_CLKENREG0, 17),
+	SG2042_GATE(GATE_CLK_TIMER7, "clk_gate_timer7", "clk_div_timer7",
+		CLK_SET_RATE_PARENT, R_CLKENREG0, 18),
+	SG2042_GATE(GATE_CLK_TIMER8, "clk_gate_timer8", "clk_div_timer8",
+		CLK_SET_RATE_PARENT, R_CLKENREG0, 19),
+
+	/* gate clocks downstream from div clocks one-to-one */
+	SG2042_GATE(GATE_CLK_UART_500M, "clk_gate_uart_500m", "clk_div_uart_500m",
+		CLK_SET_RATE_PARENT | CLK_IGNORE_UNUSED, R_CLKENREG0, 4),
+	SG2042_GATE(GATE_CLK_AHB_LPC, "clk_gate_ahb_lpc", "clk_div_ahb_lpc",
+		CLK_SET_RATE_PARENT, R_CLKENREG0, 7),
+	SG2042_GATE(GATE_CLK_EFUSE, "clk_gate_efuse", "clk_div_efuse",
+		CLK_SET_RATE_PARENT, R_CLKENREG0, 20),
 	SG2042_GATE(GATE_CLK_TX_ETH0, "clk_gate_tx_eth0", "clk_div_tx_eth0",
 		CLK_SET_RATE_PARENT, R_CLKENREG0, 30),
 	SG2042_GATE(GATE_CLK_PTP_REF_I_ETH0,
@@ -691,19 +759,12 @@ static const struct sg2042_gate_clock sg2042_gate_clks[] = {
 		CLK_SET_RATE_PARENT, R_CLKENREG1, 0),
 	SG2042_GATE(GATE_CLK_REF_ETH0, "clk_gate_ref_eth0", "clk_div_ref_eth0",
 		CLK_SET_RATE_PARENT, R_CLKENREG1, 1),
-	SG2042_GATE(GATE_CLK_UART_500M, "clk_gate_uart_500m", "clk_div_uart_500m",
-		CLK_SET_RATE_PARENT | CLK_IGNORE_UNUSED, R_CLKENREG0, 4),
-	SG2042_GATE(GATE_CLK_AHB_LPC, "clk_gate_ahb_lpc", "clk_div_ahb_lpc",
-		CLK_SET_RATE_PARENT, R_CLKENREG0, 7),
-	SG2042_GATE(GATE_CLK_EFUSE, "clk_gate_efuse", "clk_div_efuse",
-		CLK_SET_RATE_PARENT, R_CLKENREG0, 20),
+	SG2042_GATE(GATE_CLK_EMMC_100M, "clk_gate_emmc", "clk_div_emmc",
+		CLK_SET_RATE_PARENT, R_CLKENREG1, 3),
+	SG2042_GATE(GATE_CLK_SD_100M, "clk_gate_sd", "clk_div_sd",
+		CLK_SET_RATE_PARENT, R_CLKENREG1, 6),
 
-	SG2042_GATE(GATE_CLK_TOP_AXI0, "clk_gate_top_axi0", "clk_div_top_axi0",
-		CLK_SET_RATE_PARENT | CLK_IGNORE_UNUSED | CLK_IS_CRITICAL, R_CLKENREG1, 11),
-	SG2042_GATE(GATE_CLK_TOP_AXI_HSPERI,
-		"clk_gate_top_axi_hsperi", "clk_div_top_axi_hsperi",
-		CLK_SET_RATE_PARENT | CLK_IGNORE_UNUSED | CLK_IS_CRITICAL, R_CLKENREG1, 12),
-
+	/* downstream of clk_div_top_axi0 FIXME */
 	SG2042_GATE(GATE_CLK_AHB_ROM, "clk_gate_ahb_rom", "clk_gate_top_axi0",
 		 0, R_CLKENREG0, 8),
 	SG2042_GATE(GATE_CLK_AHB_SF, "clk_gate_ahb_sf", "clk_gate_top_axi0",
@@ -727,7 +788,17 @@ static const struct sg2042_gate_clock sg2042_gate_clks[] = {
 		0, R_CLKENREG0, 28),
 	SG2042_GATE(GATE_CLK_APB_RTC, "clk_gate_apb_rtc", "clk_gate_top_axi0",
 		0, R_CLKENREG0, 29),
+	SG2042_GATE(GATE_CLK_TOP_AXI0, "clk_gate_top_axi0", "clk_div_top_axi0",
+		CLK_SET_RATE_PARENT | CLK_IGNORE_UNUSED | CLK_IS_CRITICAL, R_CLKENREG1, 11),
+	/* downstream of DIV clocks which are sourced from clk_div_top_axi0 */
+	SG2042_GATE(GATE_CLK_GPIO_DB, "clk_gate_gpio_db", "clk_div_gpio_db",
+		CLK_SET_RATE_PARENT, R_CLKENREG0, 24),
+	SG2042_GATE(GATE_CLK_100K_EMMC, "clk_gate_100k_emmc", "clk_div_100k_emmc",
+		CLK_SET_RATE_PARENT, R_CLKENREG1, 4),
+	SG2042_GATE(GATE_CLK_100K_SD, "clk_gate_100k_sd", "clk_div_100k_sd",
+		CLK_SET_RATE_PARENT, R_CLKENREG1, 7),
 
+	/* downstream of clk_div_top_axi_hsperi */
 	SG2042_GATE(GATE_CLK_SYSDMA_AXI,
 		"clk_gate_sysdma_axi", "clk_gate_top_axi_hsperi",
 		CLK_SET_RATE_PARENT, R_CLKENREG0, 3),
@@ -749,43 +820,11 @@ static const struct sg2042_gate_clock sg2042_gate_clks[] = {
 	SG2042_GATE(GATE_CLK_AXI_SD,
 		"clk_gate_axi_sd", "clk_gate_top_axi_hsperi",
 		CLK_SET_RATE_PARENT, R_CLKENREG1, 5),
+	SG2042_GATE(GATE_CLK_TOP_AXI_HSPERI,
+		"clk_gate_top_axi_hsperi", "clk_div_top_axi_hsperi",
+		CLK_SET_RATE_PARENT | CLK_IGNORE_UNUSED | CLK_IS_CRITICAL, R_CLKENREG1, 12),
 
-	SG2042_GATE(GATE_CLK_TIMER1, "clk_gate_timer1", "clk_div_timer1",
-		CLK_SET_RATE_PARENT, R_CLKENREG0, 12),
-	SG2042_GATE(GATE_CLK_TIMER2, "clk_gate_timer2", "clk_div_timer2",
-		CLK_SET_RATE_PARENT, R_CLKENREG0, 13),
-	SG2042_GATE(GATE_CLK_TIMER3, "clk_gate_timer3", "clk_div_timer3",
-		CLK_SET_RATE_PARENT, R_CLKENREG0, 14),
-	SG2042_GATE(GATE_CLK_TIMER4, "clk_gate_timer4", "clk_div_timer4",
-		CLK_SET_RATE_PARENT, R_CLKENREG0, 15),
-	SG2042_GATE(GATE_CLK_TIMER5, "clk_gate_timer5", "clk_div_timer5",
-		CLK_SET_RATE_PARENT, R_CLKENREG0, 16),
-	SG2042_GATE(GATE_CLK_TIMER6, "clk_gate_timer6", "clk_div_timer6",
-		CLK_SET_RATE_PARENT, R_CLKENREG0, 17),
-	SG2042_GATE(GATE_CLK_TIMER7, "clk_gate_timer7", "clk_div_timer7",
-		CLK_SET_RATE_PARENT, R_CLKENREG0, 18),
-	SG2042_GATE(GATE_CLK_TIMER8, "clk_gate_timer8", "clk_div_timer8",
-		CLK_SET_RATE_PARENT, R_CLKENREG0, 19),
-	SG2042_GATE(GATE_CLK_100K_EMMC, "clk_gate_100k_emmc", "clk_div_100k_emmc",
-		CLK_SET_RATE_PARENT, R_CLKENREG1, 4),
-	SG2042_GATE(GATE_CLK_100K_SD, "clk_gate_100k_sd", "clk_div_100k_sd",
-		CLK_SET_RATE_PARENT, R_CLKENREG1, 7),
-	SG2042_GATE(GATE_CLK_GPIO_DB, "clk_gate_gpio_db", "clk_div_gpio_db",
-		CLK_SET_RATE_PARENT, R_CLKENREG0, 24),
-
-	SG2042_GATE(GATE_CLK_DDR01, "clk_gate_ddr01", "clk_mux_ddr01",
-		CLK_SET_RATE_PARENT | CLK_IGNORE_UNUSED | CLK_IS_CRITICAL,
-		R_CLKENREG1, 14),
-	SG2042_GATE(GATE_CLK_DDR23, "clk_gate_ddr23", "clk_mux_ddr23",
-		CLK_SET_RATE_PARENT | CLK_IGNORE_UNUSED | CLK_IS_CRITICAL,
-		R_CLKENREG1, 15),
-	SG2042_GATE(GATE_CLK_RP_CPU_NORMAL, "clk_gate_rp_cpu_normal", "clk_mux_rp_cpu_normal",
-		CLK_SET_RATE_PARENT | CLK_IGNORE_UNUSED | CLK_IS_CRITICAL,
-		R_CLKENREG0, 0),
-	SG2042_GATE(GATE_CLK_AXI_DDR, "clk_gate_axi_ddr", "clk_mux_axi_ddr",
-		CLK_SET_RATE_PARENT | CLK_IGNORE_UNUSED | CLK_IS_CRITICAL,
-		R_CLKENREG1, 13),
-
+	/* downstream of clk_gate_rp_cpu_normal about rxu */
 	SG2042_GATE(GATE_CLK_RXU0, "clk_gate_rxu0", "clk_gate_rp_cpu_normal",
 		0, R_RP_RXU_CLK_ENABLE, 0),
 	SG2042_GATE(GATE_CLK_RXU1, "clk_gate_rxu1", "clk_gate_rp_cpu_normal",
@@ -851,6 +890,7 @@ static const struct sg2042_gate_clock sg2042_gate_clks[] = {
 	SG2042_GATE(GATE_CLK_RXU31, "clk_gate_rxu31", "clk_gate_rp_cpu_normal",
 		0, R_RP_RXU_CLK_ENABLE, 31),
 
+	/* downstream of clk_gate_rp_cpu_normal about mp */
 	SG2042_GATE(GATE_CLK_MP0, "clk_gate_mp0", "clk_gate_rp_cpu_normal",
 		CLK_IGNORE_UNUSED | CLK_IS_CRITICAL, R_MP0_CONTROL_REG, 0),
 	SG2042_GATE(GATE_CLK_MP1, "clk_gate_mp1", "clk_gate_rp_cpu_normal",
