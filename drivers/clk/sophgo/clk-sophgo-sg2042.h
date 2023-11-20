@@ -203,6 +203,7 @@ struct sg2042_gate_clock {
  * @shift:		shift of "Clock Select" in mux selection register
  * @width:		width of "Clock Select" in mux selection register
  * @clk_nb:		used for notification
+ * @original_index:	set by notifier callback
  */
 struct sg2042_mux_clock {
 	unsigned int id;
@@ -214,7 +215,10 @@ struct sg2042_mux_clock {
 	u8 shift;
 	u8 width;
 	struct notifier_block clk_nb;
+	u8 original_index;
 };
+
+#define to_sg2042_mux_nb(_nb) container_of(_nb, struct sg2042_mux_clock, clk_nb)
 
 #ifdef DEBUG
 	#define dbg_info(format, arg...) \

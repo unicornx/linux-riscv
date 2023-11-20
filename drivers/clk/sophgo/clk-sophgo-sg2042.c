@@ -1070,55 +1070,33 @@ struct mux_cb_clk_name {
 	struct list_head node;
 };
 
-static struct list_head mux_cb_clk_name_list =
-	LIST_HEAD_INIT(mux_cb_clk_name_list);
 static int sg2042_mux_notifier_cb(struct notifier_block *nb,
 				unsigned long event, void *data)
 {
 	int ret = 0;
-	static unsigned char mux_id = 1;
 	struct clk_notifier_data *ndata = data;
 	struct clk_hw *hw = __clk_get_hw(ndata->clk);
 	const struct clk_ops *ops = &clk_mux_ops;
-	struct mux_cb_clk_name *cb_lsit;
+	struct sg2042_mux_clock *mux = to_sg2042_mux_nb(nb);
 
 	if (event == PRE_RATE_CHANGE) {
-		struct clk_hw *hw_p = clk_hw_get_parent(hw);
-
-		cb_lsit = kmalloc(sizeof(*cb_lsit), GFP_KERNEL);
-		if (cb_lsit) {
-			INIT_LIST_HEAD(&cb_lsit->node);
-			list_add_tail(&cb_lsit->node, &mux_cb_clk_name_list);
-		} else {
-			pr_err("mux cb kmalloc mem fail\n");
-			goto out;
-		}
-
-		cb_lsit->name = clk_hw_get_name(hw_p);
-		mux_id = ops->get_parent(hw);
-		if (mux_id > 1) {
-			ret = 1;
-			goto out;
-		}
-		ops->set_parent(hw, !mux_id);
+		mux->original_index = ops->get_parent(hw);
+		dbg_info("%s: switch parent from %d to 1\n",
+			clk_hw_get_name(hw), mux->original_index);
+		/*
+		 * "1" is the array index of the second parent input source of
+		 * mux. For SG2042, it's fpll for all mux clocks.
+		 * FIXME, any good idea to avoid magic number?
+		 */
+		ret = ops->set_parent(hw, 1);
 	} else if (event == POST_RATE_CHANGE) {
-		struct clk_hw *hw_p = clk_hw_get_parent(hw);
-
-		cb_lsit = list_first_entry_or_null(&mux_cb_clk_name_list,
-						typeof(*cb_lsit), node);
-		if (cb_lsit) {
-			const char *pre_name = cb_lsit->name;
-
-			list_del_init(&cb_lsit->node);
-			kfree(cb_lsit);
-			if (strcmp(clk_hw_get_name(hw_p), pre_name))
-				goto out;
-		}
-
-		ops->set_parent(hw, mux_id);
+		dbg_info("%s: switch parent from %d to %d\n",
+			clk_hw_get_name(hw),
+			ops->get_parent(hw),
+			mux->original_index);
+		ret = ops->set_parent(hw, mux->original_index);
 	}
 
-out:
 	return notifier_from_errno(ret);
 }
 
