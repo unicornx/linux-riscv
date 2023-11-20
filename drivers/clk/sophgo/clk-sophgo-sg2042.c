@@ -1105,11 +1105,6 @@ static int sg2042_clk_register_gates(struct sg2042_clk_data *clk_data,
 	return ret;
 }
 
-struct mux_cb_clk_name {
-	const char *name;
-	struct list_head node;
-};
-
 static int sg2042_mux_notifier_cb(struct notifier_block *nb,
 				unsigned long event, void *data)
 {
@@ -1119,16 +1114,21 @@ static int sg2042_mux_notifier_cb(struct notifier_block *nb,
 	const struct clk_ops *ops = &clk_mux_ops;
 	struct sg2042_mux_clock *mux = to_sg2042_mux_nb(nb);
 
+	/* To switch to fpll before changing rate and restore after that */
 	if (event == PRE_RATE_CHANGE) {
 		mux->original_index = ops->get_parent(hw);
-		dbg_info("%s: switch parent from %d to 1\n",
+		dbg_info("%s: trying to switch parent from %d to 1\n",
 			clk_hw_get_name(hw), mux->original_index);
 		/*
 		 * "1" is the array index of the second parent input source of
 		 * mux. For SG2042, it's fpll for all mux clocks.
+		 * "0" is the array index of the frist parent input source of
+		 * mux, For SG2042, it's mpll.
 		 * FIXME, any good idea to avoid magic number?
 		 */
-		ret = ops->set_parent(hw, 1);
+		if (0 == mux->original_index) {
+			ret = ops->set_parent(hw, 1);
+		}
 	} else if (event == POST_RATE_CHANGE) {
 		dbg_info("%s: switch parent from %d to %d\n",
 			clk_hw_get_name(hw),
