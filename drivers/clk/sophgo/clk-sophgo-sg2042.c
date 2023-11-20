@@ -701,9 +701,9 @@ static const struct sg2042_gate_clock sg2042_gate_clks[] = {
 
 	/* upon are gate clocks directly downstream of muxes */
 
-	/* downstream of clk_div_top_rp_cmn_div2, FIXME */
+	/* downstream of clk_div_top_rp_cmn_div2 */
 	SG2042_GATE(GATE_CLK_TOP_RP_CMN_DIV2,
-		"clk_gate_top_rp_cmn_div2", "clk_gate_rp_cpu_normal",
+		"clk_gate_top_rp_cmn_div2", "clk_div_top_rp_cmn_div2",
 		CLK_SET_RATE_PARENT | CLK_IGNORE_UNUSED, R_CLKENREG0, 2),
 	SG2042_GATE(GATE_CLK_HSDMA, "clk_gate_hsdma", "clk_gate_top_rp_cmn_div2",
 		CLK_SET_RATE_PARENT, R_CLKENREG1, 10),
