@@ -518,12 +518,12 @@ static const struct clk_ops sg2042_clk_pll_ro_ops = {
 #define SG2042_PLL(_id, _name, _parent_name, _r_stat, _r_enable, _r_ctrl, _shift) \
 	{								\
 		.hw.init = CLK_HW_INIT_PARENTS(				\
-				_name,					\
-				(const char *[]){_parent_name},		\
+				"s1_"_name,					\
+				(const char *[]){"s1_"_parent_name},		\
 				&sg2042_clk_pll_ops,			\
 				CLK_GET_RATE_NOCACHE | CLK_GET_ACCURACY_NOCACHE),\
 		.id = _id,						\
-		.name = _name,						\
+		.name = "s1_"_name,						\
 		.offset_ctrl = _r_ctrl,					\
 		.offset_status = _r_stat,				\
 		.offset_enable = _r_enable,				\
@@ -535,12 +535,12 @@ static const struct clk_ops sg2042_clk_pll_ro_ops = {
 #define SG2042_PLL_RO(_id, _name, _parent_name, _r_stat, _r_enable, _r_ctrl, _shift) \
 	{								\
 		.hw.init = CLK_HW_INIT_PARENTS(				\
-				_name,					\
-				(const char *[]){_parent_name},		\
+				"s1_"_name,					\
+				(const char *[]){"s1_"_parent_name},		\
 				&sg2042_clk_pll_ro_ops,			\
 				CLK_GET_RATE_NOCACHE | CLK_GET_ACCURACY_NOCACHE),\
 		.id = _id,						\
-		.name = _name,						\
+		.name = "s1_"_name,						\
 		.offset_ctrl = _r_ctrl,					\
 		.offset_status = _r_stat,				\
 		.offset_enable = _r_enable,				\
@@ -564,12 +564,12 @@ static struct sg2042_pll_clock sg2042_pll_clks[] = {
 		  _r_ctrl, _shift, _width,				\
 		  _div_flag, _init_val) {				\
 		.hw.init = CLK_HW_INIT_PARENTS(				\
-				_name,					\
-				(const char *[]){_parent_name},		\
+				"s1_"_name,					\
+				(const char *[]){"s1_"_parent_name},		\
 				&sg2042_clk_divider_ops,		\
 				0),					\
 		.id = _id,						\
-		.name = _name,						\
+		.name = "s1_"_name,						\
 		.offset_ctrl = _r_ctrl,					\
 		.shift = _shift,					\
 		.width = _width,					\
@@ -582,12 +582,12 @@ static struct sg2042_pll_clock sg2042_pll_clks[] = {
 		  _r_ctrl, _shift, _width,				\
 		  _div_flag, _init_val) {				\
 		.hw.init = CLK_HW_INIT_PARENTS(				\
-				_name,					\
-				(const char *[]){_parent_name},		\
+				"s1_"_name,					\
+				(const char *[]){"s1_"_parent_name},		\
 				&sg2042_clk_divider_ro_ops,		\
 				0),					\
 		.id = _id,						\
-		.name = _name,						\
+		.name = "s1_"_name,						\
 		.offset_ctrl = _r_ctrl,					\
 		.shift = _shift,					\
 		.width = _width,					\
@@ -694,8 +694,8 @@ static struct sg2042_divider_clock sg2042_div_clks[] = {
 
 #define SG2042_GATE(_id, _name, _parent_name, _flags, _r_enable, _bit_idx) { \
 		.id = _id,			\
-		.name = _name,			\
-		.parent_name = _parent_name,	\
+		.name = "s1_"_name,			\
+		.parent_name = "s1_"_parent_name,	\
 		.flags = _flags,		\
 		.offset_enable = _r_enable,	\
 		.bit_idx = _bit_idx,		\
@@ -982,7 +982,7 @@ static const struct sg2042_gate_clock sg2042_gate_clks[] = {
 
 #define SG2042_MUX(_id, _name, _parent_names, _flags, _r_select, _shift, _width) { \
 		.id = _id,					\
-		.name = _name,					\
+		.name = "s1_"_name,					\
 		.parent_names = _parent_names,			\
 		.num_parents = ARRAY_SIZE(_parent_names),	\
 		.flags = _flags,				\
@@ -1013,13 +1013,13 @@ static const struct sg2042_gate_clock sg2042_gate_clks[] = {
 static const u32 sg2042_mux_table[] = {1, 0};
 
 static const char *const clk_mux_ddr01_p[] = {
-			"clk_div_ddr01_0", "clk_div_ddr01_1"};
+			"s1_clk_div_ddr01_0", "s1_clk_div_ddr01_1"};
 static const char *const clk_mux_ddr23_p[] = {
-			"clk_div_ddr23_0", "clk_div_ddr23_1"};
+			"s1_clk_div_ddr23_0", "s1_clk_div_ddr23_1"};
 static const char *const clk_mux_rp_cpu_normal_p[] = {
-			"clk_div_rp_cpu_normal_0", "clk_div_rp_cpu_normal_1"};
+			"s1_clk_div_rp_cpu_normal_0", "s1_clk_div_rp_cpu_normal_1"};
 static const char *const clk_mux_axi_ddr_p[] = {
-			"clk_div_axi_ddr_0", "clk_div_axi_ddr_1"};
+			"s1_clk_div_axi_ddr_0", "s1_clk_div_axi_ddr_1"};
 
 static struct sg2042_mux_clock sg2042_mux_clks[] = {
 	SG2042_MUX(MUX_CLK_DDR01, "clk_mux_ddr01", clk_mux_ddr01_p,
@@ -1036,7 +1036,7 @@ static struct sg2042_mux_clock sg2042_mux_clks[] = {
 		R_CLKSELREG0, 1, 1),
 };
 
-DEFINE_SPINLOCK(sg2042_clk_lock);
+extern spinlock_t sg2042_clk_lock;
 
 static int sg2042_clk_register_plls(struct sg2042_clk_data *clk_data,
 				   struct sg2042_pll_clock pll_clks[],
@@ -1359,4 +1359,4 @@ error_out:
 	pr_err("%s failed error number %d\n", __func__, ret);
 }
 
-CLK_OF_DECLARE(sg2042_clk, "sophgo,sg2042-clkgen", sg2042_clk_init);
+CLK_OF_DECLARE(sg2042_clk_s1, "sophgo,sg2042-clkgen-s1", sg2042_clk_init);
