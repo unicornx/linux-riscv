@@ -539,15 +539,77 @@
 			riscv,ndev = <448>;
 		};
 
-		top1_misc: top_misc_ctrl@f030010000 {
-			compatible = "syscon";
+		sys_ctrl_s1: syscon@f030010000 {
+			compatible = "sophgo,sg2042-syscon", "syscon";
 			reg = <0xf0 0x30010000 0x0 0x8000>;
+
+			clkgen1: clock-controller {
+				compatible = "sophgo,sg2042-clkgen-s1";
+				#clock-cells = <1>;
+				clocks = <&s1_cgi>;
+				assigned-clocks = \
+					<&clkgen1 DIV_CLK_FPLL_RP_CPU_NORMAL_1>,
+					<&clkgen1 DIV_CLK_FPLL_50M_A53>,
+					<&clkgen1 DIV_CLK_FPLL_TOP_RP_CMN_DIV2>,
+					<&clkgen1 DIV_CLK_FPLL_UART_500M>,
+					<&clkgen1 DIV_CLK_FPLL_AHB_LPC>,
+					<&clkgen1 DIV_CLK_FPLL_EFUSE>,
+					<&clkgen1 DIV_CLK_FPLL_TX_ETH0>,
+					<&clkgen1 DIV_CLK_FPLL_PTP_REF_I_ETH0>,
+					<&clkgen1 DIV_CLK_FPLL_REF_ETH0>,
+					<&clkgen1 DIV_CLK_FPLL_EMMC>,
+					<&clkgen1 DIV_CLK_FPLL_SD>,
+					<&clkgen1 DIV_CLK_FPLL_TOP_AXI0>,
+					<&clkgen1 DIV_CLK_FPLL_TOP_AXI_HSPERI>,
+					<&clkgen1 DIV_CLK_FPLL_AXI_DDR_1>,
+					<&clkgen1 DIV_CLK_FPLL_DIV_TIMER1>,
+					<&clkgen1 DIV_CLK_FPLL_DIV_TIMER2>,
+					<&clkgen1 DIV_CLK_FPLL_DIV_TIMER3>,
+					<&clkgen1 DIV_CLK_FPLL_DIV_TIMER4>,
+					<&clkgen1 DIV_CLK_FPLL_DIV_TIMER5>,
+					<&clkgen1 DIV_CLK_FPLL_DIV_TIMER6>,
+					<&clkgen1 DIV_CLK_FPLL_DIV_TIMER7>,
+					<&clkgen1 DIV_CLK_FPLL_DIV_TIMER8>,
+					<&clkgen1 DIV_CLK_FPLL_100K_EMMC>,
+					<&clkgen1 DIV_CLK_FPLL_100K_SD>,
+					<&clkgen1 DIV_CLK_FPLL_GPIO_DB>,
+					<&clkgen1 DIV_CLK_MPLL_RP_CPU_NORMAL_0>,
+					<&clkgen1 DIV_CLK_MPLL_AXI_DDR_0>;
+				assigned-clock-rates = \
+					<2000000000>,
+					<50000000>,
+					<1000000000>,
+					<500000000>,
+					<200000000>,
+					<25000000>,
+					<125000000>,
+					<50000000>,
+					<25000000>,
+					<100000000>,
+					<100000000>,
+					<100000000>,
+					<250000000>,
+					<1000000000>,
+					<50000000>,
+					<50000000>,
+					<50000000>,
+					<50000000>,
+					<50000000>,
+					<50000000>,
+					<50000000>,
+					<50000000>,
+					<100000>,
+					<100000>,
+					<100000>,
+					<2000000000>,
+					<1000000000>;
+			};
 		};
 
 		rst1: reset1-controller {
 			#reset-cells = <1>;
 			compatible = "bitmain,reset";
-			subctrl-syscon = <&top1_misc>;
+			subctrl-syscon = <&sys_ctrl_s1>;
 			top_rst_offset = <0x3000>;
 			nr_resets = <RST_MAX_NUM>;
 		};
@@ -557,9 +619,9 @@
 			reg = <0xf0 0x30009000 0x0 0x400>;
 			#address-cells = <1>;
 			#size-cells = <0>;
-			clocks = <&s1_div_clk GATE_CLK_APB_GPIO>,
-				 <&s1_div_clk GATE_CLK_APB_GPIO_INTR>,
-				 <&s1_div_clk GATE_CLK_GPIO_DB>;
+			clocks = <&clkgen1 GATE_CLK_APB_GPIO>,
+				 <&clkgen1 GATE_CLK_APB_GPIO_INTR>,
+				 <&clkgen1 GATE_CLK_GPIO_DB>;
 			clock-names = "base_clk", "intr_clk", "db_clk";
 
 			port3a: gpio-controller@0 {
@@ -583,11 +645,11 @@
 			interrupts = <SOC_PERIPHERAL_IRQ(356) IRQ_TYPE_LEVEL_HIGH>;
 			interrupt-names = "macirq";
 			clock-names = "clk_tx", "gate_clk_tx", "stmmaceth", "ptp_ref", "gate_clk_ref";
-			clocks = <&s1_div_clk DIV_CLK_FPLL_TX_ETH0>,
-				   <&s1_div_clk GATE_CLK_TX_ETH0>,
-				   <&s1_div_clk GATE_CLK_AXI_ETH0>,
-				   <&s1_div_clk GATE_CLK_PTP_REF_I_ETH0>,
-				   <&s1_div_clk GATE_CLK_REF_ETH0>;
+			clocks = <&clkgen1 DIV_CLK_FPLL_TX_ETH0>,
+				   <&clkgen1 GATE_CLK_TX_ETH0>,
+				   <&clkgen1 GATE_CLK_AXI_ETH0>,
+				   <&clkgen1 GATE_CLK_PTP_REF_I_ETH0>,
+				   <&clkgen1 GATE_CLK_REF_ETH0>;
 
 			/* no hash filter and perfect filter support */
 			snps,multicast-filter-bins = <0>;
@@ -629,9 +691,9 @@
 			resets = <&rst1 RST_EMMC>;
 			reset-names = "emmc";
 			clocks =
-				<&s1_div_clk GATE_CLK_EMMC_100M>,
-				<&s1_div_clk GATE_CLK_AXI_EMMC>,
-				<&s1_div_clk GATE_CLK_100K_EMMC>;
+				<&clkgen1 GATE_CLK_EMMC_100M>,
+				<&clkgen1 GATE_CLK_AXI_EMMC>,
+				<&clkgen1 GATE_CLK_100K_EMMC>;
 			clock-names =
 				"clk_gate_emmc",
 				"clk_gate_axi_emmc",
@@ -650,9 +712,9 @@
 			resets = <&rst1 RST_SD>;
 			reset-names = "sdio";
 			clocks =
-				<&s1_div_clk GATE_CLK_SD_100M>,
-				<&s1_div_clk GATE_CLK_AXI_SD>,
-				<&s1_div_clk GATE_CLK_100K_SD>;
+				<&clkgen1 GATE_CLK_SD_100M>,
+				<&clkgen1 GATE_CLK_AXI_SD>,
+				<&clkgen1 GATE_CLK_100K_SD>;
 			clock-names =
 				"clk_gate_sd",
 				"clk_gate_axi_sd",
@@ -669,7 +731,7 @@
 		interrupt-parent = <&intc>;
 		interrupts = <SOC_PERIPHERAL_IRQ(332) IRQ_TYPE_LEVEL_HIGH>;
 		clock-frequency = <100000000>;
-		clocks = <&s1_div_clk GATE_CLK_AHB_SF>;
+		clocks = <&clkgen1 GATE_CLK_AHB_SF>;
 		flash@0 {
 			reg = <0>;
 			compatible = "jedec,spi-nor";
@@ -685,7 +747,7 @@
 		interrupt-parent = <&intc>;
 		interrupts = <SOC_PERIPHERAL_IRQ(333) IRQ_TYPE_LEVEL_HIGH>;
 		clock-frequency = <100000000>;
-		clocks = <&s1_div_clk GATE_CLK_AHB_SF>;
+		clocks = <&clkgen1 GATE_CLK_AHB_SF>;
 		flash@0 {
 			reg = <0>;
 			compatible = "jedec,spi-nor";
