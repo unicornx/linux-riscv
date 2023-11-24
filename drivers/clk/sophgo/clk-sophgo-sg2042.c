@@ -17,6 +17,11 @@
 #define ENCODE_PLL_CTRL(fbdiv, p1, p2, refdiv) \
 	(((fbdiv & 0xfff) << 16) | ((p2 & 0x7) << 12) | ((p1 & 0x7) << 8) | (refdiv & 0x3f))
 
+static inline unsigned long abs_diff(unsigned long a, unsigned long b)
+{
+	return (a > b) ? (a - b) : (b - a);
+}
+
 static inline int __sg2042_pll_enable(struct sg2042_pll_clock *pll, bool en)
 {
 	unsigned int value = 0;
