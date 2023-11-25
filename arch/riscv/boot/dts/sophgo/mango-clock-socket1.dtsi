@@ -1,5 +1,5 @@
 / {
-	s1_cgi: oscillator {
+	s1_cgi: oscillator-s1 {
 		compatible = "fixed-clock";
 		clock-output-names = "s1_cgi";
 		#clock-cells = <0>;
