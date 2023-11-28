@@ -1367,10 +1367,10 @@ static const struct of_device_id clk_sophgo_sg2042_match[] = {
 	{ /* sentinel */ }
 };
 
-static struct platform_driver clk_sophgo_sg2042_driver = {
+static struct platform_driver clk_sophgo_sg2042_driver_s1 = {
 	.driver = {
 		.name = "clk-sophgo-sg2042-s1",
 		.of_match_table = clk_sophgo_sg2042_match,
 	},
 };
-builtin_platform_driver_probe(clk_sophgo_sg2042_driver, clk_sophgo_sg2042_probe);
+builtin_platform_driver_probe(clk_sophgo_sg2042_driver_s1, clk_sophgo_sg2042_probe);
