@@ -540,7 +540,7 @@
 		};
 
 		sys_ctrl_s1: syscon@f030010000 {
-			compatible = "sophgo,sg2042-syscon", "syscon";
+			compatible = "sophgo,sg2042-syscon", "syscon", "simple-mfd";
 			reg = <0xf0 0x30010000 0x0 0x8000>;
 
 			clkgen1: clock-controller {

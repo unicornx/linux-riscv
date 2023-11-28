@@ -1261,7 +1261,7 @@ error_cleanup:
 }
 
 static int __init sg2042_clk_init_clk_data(
-	struct device_node *node,
+	struct platform_device *pdev,
 	int num_clks,
 	struct sg2042_clk_data **pp_clk_data)
 {
@@ -1269,7 +1269,7 @@ static int __init sg2042_clk_init_clk_data(
 	struct sg2042_clk_data *clk_data = NULL;
 	struct device_node *np_syscon;
 
-	np_syscon = of_get_parent(node);
+	np_syscon = np_syscon = of_get_parent(pdev->dev.of_node);
 	if (!np_syscon) {
 		pr_err("failed to get syscon node\n");
 		ret = -EINVAL;
@@ -1301,7 +1301,7 @@ error_out:
 	return ret;
 }
 
-static void __init sg2042_clk_init(struct device_node *node)
+static int __init clk_sophgo_sg2042_probe(struct platform_device *pdev)
 {
 	struct sg2042_clk_data *clk_data = NULL;
 	int i, ret = 0;
@@ -1316,7 +1316,7 @@ static void __init sg2042_clk_init(struct device_node *node)
 		goto error_out;
 	}
 
-	ret = sg2042_clk_init_clk_data(node, num_clks, &clk_data);
+	ret = sg2042_clk_init_clk_data(pdev, num_clks, &clk_data);
 	if (ret < 0)
 		goto error_out;
 
@@ -1342,11 +1342,12 @@ static void __init sg2042_clk_init(struct device_node *node)
 
 	for (i = 0; i < num_clks; i++)
 		dbg_info("provider [%d]: %s\n", i, clk_hw_get_name(clk_data->onecell_data.hws[i]));
-	ret = of_clk_add_hw_provider(node, of_clk_hw_onecell_get, &clk_data->onecell_data);
+	ret = devm_of_clk_add_hw_provider(
+		&pdev->dev, of_clk_hw_onecell_get, &clk_data->onecell_data);
 	if (ret)
 		goto cleanup;
 
-	return;
+	return 0;
 
 cleanup:
 	for (i = 0; i < num_clks; i++) {
@@ -1357,6 +1358,19 @@ cleanup:
 
 error_out:
 	pr_err("%s failed error number %d\n", __func__, ret);
+
+	return ret;
 }
 
-CLK_OF_DECLARE(sg2042_clk_s1, "sophgo,sg2042-clkgen-s1", sg2042_clk_init);
+static const struct of_device_id clk_sophgo_sg2042_match[] = {
+	{ .compatible = "sophgo,sg2042-clkgen-s1" },
+	{ /* sentinel */ }
+};
+
+static struct platform_driver clk_sophgo_sg2042_driver = {
+	.driver = {
+		.name = "clk-sophgo-sg2042-s1",
+		.of_match_table = clk_sophgo_sg2042_match,
+	},
+};
+builtin_platform_driver_probe(clk_sophgo_sg2042_driver, clk_sophgo_sg2042_probe);
