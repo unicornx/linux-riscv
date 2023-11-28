@@ -1269,7 +1269,7 @@ static int __init sg2042_clk_init_clk_data(
 	struct sg2042_clk_data *clk_data = NULL;
 	struct device_node *np_syscon;
 
-	np_syscon = np_syscon = of_get_parent(pdev->dev.of_node);
+	np_syscon = of_get_parent(pdev->dev.of_node);
 	if (!np_syscon) {
 		pr_err("failed to get syscon node\n");
 		ret = -EINVAL;
