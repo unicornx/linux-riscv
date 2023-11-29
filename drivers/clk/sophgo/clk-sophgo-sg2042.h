@@ -212,6 +212,7 @@ struct sg2042_mux_clock {
 
 #define to_sg2042_mux_nb(_nb) container_of(_nb, struct sg2042_mux_clock, clk_nb)
 
+#define DEBUG
 #ifdef DEBUG
 	#define dbg_info(format, arg...) \
 		pr_info("--> %s: "format"", __func__, ## arg)

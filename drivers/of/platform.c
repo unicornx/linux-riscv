@@ -387,6 +387,7 @@ static int of_platform_bus_create(struct device_node *bus,
 	}
 
 	dev = of_platform_device_create_pdata(bus, bus_id, platform_data, parent);
+	pr_info("===> %s, %s, dev = %p\n", __func__, bus->name, dev);
 	if (!dev || !of_match_node(matches, bus))
 		return 0;
 

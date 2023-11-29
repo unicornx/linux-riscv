@@ -864,6 +864,8 @@ int __platform_driver_register(struct platform_driver *drv,
 	drv->driver.owner = owner;
 	drv->driver.bus = &platform_bus_type;
 
+	pr_info("===> %s, drv name is %s\n", __func__, drv->driver.name);
+
 	return driver_register(&drv->driver);
 }
 EXPORT_SYMBOL_GPL(__platform_driver_register);
