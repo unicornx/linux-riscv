@@ -252,7 +252,7 @@ int sophgo_pinctrl_probe(struct platform_device *pdev)
 		dev_err(dev, "%s can't get subctrl-syscon node\n", __func__);
 		return -EINVAL;
 	}
-	syscon = syscon_node_to_regmap(np_top);
+	syscon = device_node_to_regmap(np_top);
 	if (IS_ERR(syscon)) {
 		dev_err(dev, "cannot get regmap\n");
 		return PTR_ERR(syscon);
