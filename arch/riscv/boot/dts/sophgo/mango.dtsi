@@ -1,6 +1,5 @@
 /dts-v1/;
-#include <dt-bindings/clock/sophgo.h>
-#include <dt-bindings/clock/sophgo-mango-clock.h>
+#include <dt-bindings/clock/sophgo,sg2042-clkgen.h>
 #include <dt-bindings/gpio/gpio.h>
 #include <dt-bindings/input/input.h>
 #include <dt-bindings/reset/sophgo-mango-resets.h>
@@ -466,8 +465,8 @@
 			interrupt-parent = <&intc>;
 			interrupts = <SOC_PERIPHERAL_IRQ(100) IRQ_TYPE_LEVEL_HIGH>;
 			reg = <0x70 0x30003000 0x0 0x14>;
-			clocks = <&div_clk GATE_CLK_TIMER1>,
-				 <&div_clk GATE_CLK_APB_TIMER>;
+			clocks = <&clkgen GATE_CLK_TIMER1>,
+				 <&clkgen GATE_CLK_APB_TIMER>;
 			clock-names = "timer", "pclk";
 			clk-drv-rating = <300>;
 		};
@@ -477,21 +476,85 @@
 			interrupt-parent = <&intc>;
 			interrupts = <SOC_PERIPHERAL_IRQ(100) IRQ_TYPE_LEVEL_HIGH>;
 			reg = <0x70 0x30003014 0x0 0x10>;
-			clocks = <&div_clk GATE_CLK_TIMER2>,
-				 <&div_clk GATE_CLK_APB_TIMER>;
+			clocks = <&clkgen GATE_CLK_TIMER2>,
+				 <&clkgen GATE_CLK_APB_TIMER>;
 			clock-names = "timer", "pclk";
 			clk-drv-rating = <300>;
 		};
 
-		top_misc: top_misc_ctrl@7030010000 {
-			compatible = "syscon";
+		sys_ctrl: system-controller@7030010000 {
+			compatible = "sophgo,sg2042-sysctrl";
 			reg = <0x70 0x30010000 0x0 0x8000>;
+		};
+
+		clkgen: clock-controller@7030012000 {
+			compatible = "sophgo,sg2042-clkgen";
+			reg = <0x70 0x30012000 0x0 0x1000>;
+			system-ctrl = <&sys_ctrl>;
+			#clock-cells = <1>;
+			clocks = <&cgi>;
+			assigned-clocks = \
+				<&clkgen DIV_CLK_FPLL_RP_CPU_NORMAL_1>,
+				<&clkgen DIV_CLK_FPLL_50M_A53>,
+				<&clkgen DIV_CLK_FPLL_TOP_RP_CMN_DIV2>,
+				<&clkgen DIV_CLK_FPLL_UART_500M>,
+				<&clkgen DIV_CLK_FPLL_AHB_LPC>,
+				<&clkgen DIV_CLK_FPLL_EFUSE>,
+				<&clkgen DIV_CLK_FPLL_TX_ETH0>,
+				<&clkgen DIV_CLK_FPLL_PTP_REF_I_ETH0>,
+				<&clkgen DIV_CLK_FPLL_REF_ETH0>,
+				<&clkgen DIV_CLK_FPLL_EMMC>,
+				<&clkgen DIV_CLK_FPLL_SD>,
+				<&clkgen DIV_CLK_FPLL_TOP_AXI0>,
+				<&clkgen DIV_CLK_FPLL_TOP_AXI_HSPERI>,
+				<&clkgen DIV_CLK_FPLL_AXI_DDR_1>,
+				<&clkgen DIV_CLK_FPLL_DIV_TIMER1>,
+				<&clkgen DIV_CLK_FPLL_DIV_TIMER2>,
+				<&clkgen DIV_CLK_FPLL_DIV_TIMER3>,
+				<&clkgen DIV_CLK_FPLL_DIV_TIMER4>,
+				<&clkgen DIV_CLK_FPLL_DIV_TIMER5>,
+				<&clkgen DIV_CLK_FPLL_DIV_TIMER6>,
+				<&clkgen DIV_CLK_FPLL_DIV_TIMER7>,
+				<&clkgen DIV_CLK_FPLL_DIV_TIMER8>,
+				<&clkgen DIV_CLK_FPLL_100K_EMMC>,
+				<&clkgen DIV_CLK_FPLL_100K_SD>,
+				<&clkgen DIV_CLK_FPLL_GPIO_DB>,
+				<&clkgen DIV_CLK_MPLL_RP_CPU_NORMAL_0>,
+				<&clkgen DIV_CLK_MPLL_AXI_DDR_0>;
+			assigned-clock-rates = \
+				<2000000000>,
+				<50000000>,
+				<1000000000>,
+				<500000000>,
+				<200000000>,
+				<25000000>,
+				<125000000>,
+				<50000000>,
+				<25000000>,
+				<100000000>,
+				<100000000>,
+				<100000000>,
+				<250000000>,
+				<1000000000>,
+				<50000000>,
+				<50000000>,
+				<50000000>,
+				<50000000>,
+				<50000000>,
+				<50000000>,
+				<50000000>,
+				<50000000>,
+				<100000>,
+				<100000>,
+				<100000>,
+				<2000000000>,
+				<1000000000>;
 		};
 
 		rst: reset-controller {
 			#reset-cells = <1>;
 			compatible = "bitmain,reset";
-			subctrl-syscon = <&top_misc>;
+			subctrl-syscon = <&sys_ctrl>;
 			top_rst_offset = <0x3000>;
 			nr_resets = <RST_MAX_NUM>;
 		};
@@ -500,7 +563,7 @@
 			#address-cells = <1>;
 			#size-cells = <0>;
 			compatible = "snps,designware-i2c";
-			clocks = <&div_clk GATE_CLK_APB_I2C>;
+			clocks = <&clkgen GATE_CLK_APB_I2C>;
 			clock-names = "clk_gate_apb_i2c";
 			reg = <0x70 0x30005000 0x0 0x1000>;
 			interrupt-parent = <&intc>;
@@ -514,7 +577,7 @@
 			#address-cells = <1>;
 			#size-cells = <0>;
 			compatible = "snps,designware-i2c";
-			clocks = <&div_clk GATE_CLK_APB_I2C>;
+			clocks = <&clkgen GATE_CLK_APB_I2C>;
 			clock-names = "clk_gate_apb_i2c";
 			reg = <0x70 0x30006000 0x0 0x1000>;
 			interrupt-parent = <&intc>;
@@ -528,7 +591,7 @@
 			#address-cells = <1>;
 			#size-cells = <0>;
 			compatible = "snps,designware-i2c";
-			clocks = <&div_clk GATE_CLK_APB_I2C>;
+			clocks = <&clkgen GATE_CLK_APB_I2C>;
 			clock-names = "clk_gate_apb_i2c";
 			reg = <0x70 0x30007000 0x0 0x1000>;
 			interrupt-parent = <&intc>;
@@ -542,7 +605,7 @@
 			#address-cells = <1>;
 			#size-cells = <0>;
 			compatible = "snps,designware-i2c";
-			clocks = <&div_clk GATE_CLK_APB_I2C>;
+			clocks = <&clkgen GATE_CLK_APB_I2C>;
 			clock-names = "clk_gate_apb_i2c";
 			reg = <0x70 0x30008000 0x0 0x1000>;
 			interrupt-parent = <&intc>;
@@ -557,9 +620,9 @@
 			reg = <0x70 0x30009000 0x0 0x400>;
 			#address-cells = <1>;
 			#size-cells = <0>;
-			clocks = <&div_clk GATE_CLK_APB_GPIO>,
-				 <&div_clk GATE_CLK_APB_GPIO_INTR>,
-				 <&div_clk GATE_CLK_GPIO_DB>;
+			clocks = <&clkgen GATE_CLK_APB_GPIO>,
+				 <&clkgen GATE_CLK_APB_GPIO_INTR>,
+				 <&clkgen GATE_CLK_GPIO_DB>;
 			clock-names = "base_clk", "intr_clk", "db_clk";
 
 			port0a: gpio-controller@0 {
@@ -581,9 +644,9 @@
 			reg = <0x70 0x3000a000 0x0 0x400>;
 			#address-cells = <1>;
 			#size-cells = <0>;
-			clocks = <&div_clk GATE_CLK_APB_GPIO>,
-				 <&div_clk GATE_CLK_APB_GPIO_INTR>,
-				 <&div_clk GATE_CLK_GPIO_DB>;
+			clocks = <&clkgen GATE_CLK_APB_GPIO>,
+				 <&clkgen GATE_CLK_APB_GPIO_INTR>,
+				 <&clkgen GATE_CLK_GPIO_DB>;
 			clock-names = "base_clk", "intr_clk", "db_clk";
 
 			port1a: gpio-controller@0 {
@@ -605,9 +668,9 @@
 			reg = <0x70 0x3000b000 0x0 0x400>;
 			#address-cells = <1>;
 			#size-cells = <0>;
-			clocks = <&div_clk GATE_CLK_APB_GPIO>,
-				 <&div_clk GATE_CLK_APB_GPIO_INTR>,
-				 <&div_clk GATE_CLK_GPIO_DB>;
+			clocks = <&clkgen GATE_CLK_APB_GPIO>,
+				 <&clkgen GATE_CLK_APB_GPIO_INTR>,
+				 <&clkgen GATE_CLK_GPIO_DB>;
 			clock-names = "base_clk", "intr_clk", "db_clk";
 
 			port2a: gpio-controller@0 {
@@ -627,7 +690,7 @@
 		pwm: pwm@703000C000 {
 			compatible = "sophgo,sophgo-pwm";
 			reg = <0x70 0x3000C000 0x0 0x20>;
-			clocks = <&div_clk GATE_CLK_APB_PWM>;
+			clocks = <&clkgen GATE_CLK_APB_PWM>;
 			clock-names = "clk_gate_apb_pwm";
 			#pwm-cells = <2>;
 			pwm-num = <2>;
@@ -650,8 +713,8 @@
 			interrupt-parent = <&intc>;
 			interrupts = <SOC_PERIPHERAL_IRQ(112) IRQ_TYPE_LEVEL_HIGH>;
 			clock-frequency = <500000000>;
-			clocks = <&div_clk GATE_CLK_UART_500M>,
-				 <&div_clk GATE_CLK_APB_UART>;
+			clocks = <&clkgen GATE_CLK_UART_500M>,
+				 <&clkgen GATE_CLK_APB_UART>;
 			clock-names = "baudclk", "apb_pclk";
 			reg-shift = <2>;
 			reg-io-width = <4>;
@@ -663,8 +726,8 @@
 			interrupt-parent = <&intc>;
 			interrupts = <SOC_PERIPHERAL_IRQ(113) IRQ_TYPE_LEVEL_HIGH>;
 			clock-frequency = <500000000>;
-			clocks = <&div_clk GATE_CLK_UART_500M>,
-				 <&div_clk GATE_CLK_APB_UART>;
+			clocks = <&clkgen GATE_CLK_UART_500M>,
+				 <&clkgen GATE_CLK_APB_UART>;
 			clock-names = "baudclk", "apb_pclk";
 			reg-shift = <2>;
 			reg-io-width = <4>;
@@ -676,8 +739,8 @@
 			interrupt-parent = <&intc>;
 			interrupts = <SOC_PERIPHERAL_IRQ(114) IRQ_TYPE_LEVEL_HIGH>;
 			clock-frequency = <500000000>;
-			clocks = <&div_clk GATE_CLK_UART_500M>,
-				 <&div_clk GATE_CLK_APB_UART>;
+			clocks = <&clkgen GATE_CLK_UART_500M>,
+				 <&clkgen GATE_CLK_APB_UART>;
 			clock-names = "baudclk", "apb_pclk";
 			reg-shift = <2>;
 			reg-io-width = <4>;
@@ -689,8 +752,8 @@
 			interrupt-parent = <&intc>;
 			interrupts = <SOC_PERIPHERAL_IRQ(115) IRQ_TYPE_LEVEL_HIGH>;
 			clock-frequency = <500000000>;
-			clocks = <&div_clk GATE_CLK_UART_500M>,
-				 <&div_clk GATE_CLK_APB_UART>;
+			clocks = <&clkgen GATE_CLK_UART_500M>,
+				 <&clkgen GATE_CLK_APB_UART>;
 			clock-names = "baudclk", "apb_pclk";
 			reg-shift = <2>;
 			reg-io-width = <4>;
@@ -709,9 +772,9 @@
 			resets = <&rst RST_EMMC>;
 			reset-names = "emmc";
 			clocks =
-				<&div_clk GATE_CLK_EMMC_100M>,
-				<&div_clk GATE_CLK_AXI_EMMC>,
-				<&div_clk GATE_CLK_100K_EMMC>;
+				<&clkgen GATE_CLK_EMMC_100M>,
+				<&clkgen GATE_CLK_AXI_EMMC>,
+				<&clkgen GATE_CLK_100K_EMMC>;
 			clock-names =
 				"clk_gate_emmc",
 				"clk_gate_axi_emmc",
@@ -730,9 +793,9 @@
 			resets = <&rst RST_SD>;
 			reset-names = "sdio";
 			clocks =
-				<&div_clk GATE_CLK_SD_100M>,
-				<&div_clk GATE_CLK_AXI_SD>,
-				<&div_clk GATE_CLK_100K_SD>;
+				<&clkgen GATE_CLK_SD_100M>,
+				<&clkgen GATE_CLK_AXI_SD>,
+				<&clkgen GATE_CLK_100K_SD>;
 			clock-names =
 				"clk_gate_sd",
 				"clk_gate_axi_sd",
@@ -748,7 +811,7 @@
 			interrupt-parent = <&intc>;
 			interrupts = <SOC_PERIPHERAL_IRQ(108) IRQ_TYPE_LEVEL_HIGH>;
 			clock-frequency = <100000000>;
-			clocks = <&div_clk GATE_CLK_AHB_SF>;
+			clocks = <&clkgen GATE_CLK_AHB_SF>;
 			flash@0 {
 				reg = <0>;
 				compatible = "jedec,spi-nor";
@@ -764,7 +827,7 @@
 			interrupt-parent = <&intc>;
 			interrupts = <SOC_PERIPHERAL_IRQ(109) IRQ_TYPE_LEVEL_HIGH>;
 			clock-frequency = <100000000>;
-			clocks = <&div_clk GATE_CLK_AHB_SF>;
+			clocks = <&clkgen GATE_CLK_AHB_SF>;
 			flash@0 {
 				reg = <0>;
 				compatible = "jedec,spi-nor";
@@ -778,8 +841,8 @@
 			reg = <0x70 0x40004000 0x0 0x1000>;
 			interrupt-parent = <&intc>;
 			interrupts = <SOC_PERIPHERAL_IRQ(110) IRQ_TYPE_LEVEL_HIGH>;
-			clocks = <&div_clk GATE_CLK_APB_SPI>,
-			          <&div_clk GATE_CLK_SYSDMA_AXI>;
+			clocks = <&clkgen GATE_CLK_APB_SPI>,
+			          <&clkgen GATE_CLK_SYSDMA_AXI>;
 			clock-frequency = <250000000>;
 			resets = <&rst RST_SPI0>;
 			reset-names = "spi0";
@@ -794,8 +857,8 @@
 			reg = <0x70 0x40005000 0x0 0x1000>;
 			interrupt-parent = <&intc>;
 			interrupts = <SOC_PERIPHERAL_IRQ(111) IRQ_TYPE_LEVEL_HIGH>;
-			clocks = <&div_clk GATE_CLK_APB_SPI>,
-			           <&div_clk GATE_CLK_SYSDMA_AXI>;
+			clocks = <&clkgen GATE_CLK_APB_SPI>,
+			           <&clkgen GATE_CLK_SYSDMA_AXI>;
 			clock-frequency = <250000000>;
 			resets = <&rst RST_SPI1>;
 			reset-names = "spi1";
@@ -840,11 +903,11 @@
 			interrupts = <SOC_PERIPHERAL_IRQ(132) IRQ_TYPE_LEVEL_HIGH>;
 			interrupt-names = "macirq";
 			clock-names = "clk_tx", "gate_clk_tx", "stmmaceth", "ptp_ref", "gate_clk_ref";
-			clocks = <&div_clk DIV_CLK_FPLL_TX_ETH0>,
-				   <&div_clk GATE_CLK_TX_ETH0>,
-				   <&div_clk GATE_CLK_AXI_ETH0>,
-				   <&div_clk GATE_CLK_PTP_REF_I_ETH0>,
-				   <&div_clk GATE_CLK_REF_ETH0>;
+			clocks = <&clkgen DIV_CLK_FPLL_TX_ETH0>,
+				   <&clkgen GATE_CLK_TX_ETH0>,
+				   <&clkgen GATE_CLK_AXI_ETH0>,
+				   <&clkgen GATE_CLK_PTP_REF_I_ETH0>,
+				   <&clkgen GATE_CLK_REF_ETH0>;
 
 			/* no hash filter and perfect filter support */
 			snps,multicast-filter-bins = <0>;
