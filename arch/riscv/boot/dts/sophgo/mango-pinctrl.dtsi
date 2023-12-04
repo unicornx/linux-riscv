@@ -1,7 +1,7 @@
 / {
 	bmpctrl: pinctrl@50010400 {
 		compatible = "sophgo, pinctrl-mango";
-		subctrl-syscon = <&top_misc>;
+		subctrl-syscon = <&sys_ctrl>;
 		top_pinctl_offset = <0x1000>;
 
 		lpc_acquire: lpc_acquire {
