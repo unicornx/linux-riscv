@@ -108,7 +108,7 @@ static int bm_reset_probe(struct platform_device *pdev)
 		goto out_free_devm;
 	}
 
-	syscon = syscon_node_to_regmap(np_top);
+	syscon = device_node_to_regmap(np_top);
 	if (IS_ERR(syscon)) {
 		dev_err(dev, "cannot get regmap\n");
 		goto out_free_devm;
