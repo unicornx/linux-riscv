@@ -547,7 +547,7 @@
 		clkgen1: clock-controller@f030012000 {
 			compatible = "sophgo,sg2042-clkgen-s1";
 			reg = <0xf0 0x30012000 0x0 0x1000>;
-			system-ctrl = <&sys_ctrl_s1>;
+			sophgo,system-ctrl = <&sys_ctrl_s1>;
 			#clock-cells = <1>;
 			clocks = <&s1_cgi>;
 			assigned-clocks = \
