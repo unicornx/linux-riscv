@@ -242,6 +242,11 @@ struct sg2042_mux_clock {
 
 #define to_sg2042_mux_nb(_nb) container_of(_nb, struct sg2042_mux_clock, clk_nb)
 
+static inline unsigned long abs_diff(unsigned long a, unsigned long b)
+{
+	return (a > b) ? (a - b) : (b - a);
+}
+
 #define KHZ 1000UL
 #define MHZ (KHZ * KHZ)
 
