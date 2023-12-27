@@ -15,6 +15,11 @@
 
 #include "clk-sophgo-sg2042.h"
 
+static inline unsigned long abs_diff(unsigned long a, unsigned long b)
+{
+	return (a > b) ? (a - b) : (b - a);
+}
+
 #define KHZ 1000UL
 #define MHZ (KHZ * KHZ)
 
