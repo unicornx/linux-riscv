@@ -14,6 +14,26 @@
 	};
 };
 
+&pinmux {
+	status = "okay";
+
+	uart0_pins: uart0-pins {
+		pinctrl-single,bits = <
+			/* UART0_TX */
+			0x00a0 0x0 0x300000
+			/* UART0_RX */
+			0x00a4 0x0 0x30
+			/* UART0_RTS */
+			0x00a4 0x0 0x300000
+			/* UART0_CTS */
+			0x00a8 0x0 0x30
+		>;
+	};
+};
+
 &uart0 {
 	status = "okay";
+
+	pinctrl-names = "default";
+	pinctrl-0 = <&uart0_pins>;
 };

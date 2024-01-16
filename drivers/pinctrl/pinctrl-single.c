@@ -379,13 +379,16 @@ static int pcs_set_mux(struct pinctrl_dev *pctldev, unsigned fselector,
 
 	dev_dbg(pcs->dev, "enabling %s function%i\n",
 		func->name, fselector);
-
+	pr_info("---> %s [%d(%s), %d]\n", __func__, fselector, func->name, group);
+	pr_info("---> func->nvals = %d\n", func->nvals);
 	for (i = 0; i < func->nvals; i++) {
 		struct pcs_func_vals *vals;
 		unsigned long flags;
 		unsigned val, mask;
 
 		vals = &func->vals[i];
+		pr_info("---> [%p, %x, %x]\n", vals->reg, vals->val, vals->mask);
+
 		raw_spin_lock_irqsave(&pcs->lock, flags);
 		val = pcs->read(vals->reg);
 
@@ -398,6 +401,7 @@ static int pcs_set_mux(struct pinctrl_dev *pctldev, unsigned fselector,
 		val |= (vals->val & mask);
 		pcs->write(val, vals->reg);
 		raw_spin_unlock_irqrestore(&pcs->lock, flags);
+		pr_info("---> mask=%x, val=%x\n", mask, val);
 	}
 
 	return 0;
@@ -1125,14 +1129,13 @@ static int pcs_parse_bits_in_pinctrl_entry(struct pcs_device *pcs,
 		dev_err(pcs->dev, "Invalid number of rows: %d\n", rows);
 		return -EINVAL;
 	}
-
+	pr_info("---> %s, rows = %d\n", __func__, rows);
 	if (PCS_HAS_PINCONF) {
 		dev_err(pcs->dev, "pinconf not supported\n");
 		return -ENOTSUPP;
 	}
-
 	npins_in_row = pcs->width / pcs->bits_per_pin;
-
+	pr_info("---> %s, %d, %d, %d\n", __func__, pcs->width, pcs->bits_per_pin, npins_in_row);
 	vals = devm_kzalloc(pcs->dev,
 			    array3_size(rows, npins_in_row, sizeof(*vals)),
 			    GFP_KERNEL);
@@ -1152,24 +1155,26 @@ static int pcs_parse_bits_in_pinctrl_entry(struct pcs_device *pcs,
 		unsigned pin_num_from_lsb;
 		int pin;
 
+		pr_info("----> 1\n");
+
 		res = pinctrl_parse_index_with_args(np, name, i, &pinctrl_spec);
 		if (res)
 			return res;
-
+		pr_info("----> 2\n");
 		if (pinctrl_spec.args_count < 3) {
 			dev_err(pcs->dev, "invalid args_count for spec: %i\n",
 				pinctrl_spec.args_count);
 			break;
 		}
-
+		
 		/* Index plus two value cells */
 		offset = pinctrl_spec.args[0];
 		val = pinctrl_spec.args[1];
 		mask = pinctrl_spec.args[2];
+		//pr_info("----> 3\n");
 
-		dev_dbg(pcs->dev, "%pOFn index: 0x%x value: 0x%x mask: 0x%x\n",
+		pr_info("----> 3 %pOFn index: 0x%x value: 0x%x mask: 0x%x\n",
 			pinctrl_spec.np, offset, val, mask);
-
 		/* Parse pins in each row from LSB */
 		while (mask) {
 			bit_pos = __ffs(mask);
@@ -1177,6 +1182,7 @@ static int pcs_parse_bits_in_pinctrl_entry(struct pcs_device *pcs,
 			mask_pos = ((pcs->fmask) << bit_pos);
 			val_pos = val & mask_pos;
 			submask = mask & mask_pos;
+			pr_info("----> 4 bit_pos = %d, pin_num_from_lsb = %d ,val_pos = %d\n", bit_pos, pin_num_from_lsb, val_pos);
 
 			if ((mask & mask_pos) == 0) {
 				dev_err(pcs->dev,
@@ -1184,9 +1190,9 @@ static int pcs_parse_bits_in_pinctrl_entry(struct pcs_device *pcs,
 					np, offset);
 				break;
 			}
-
+			
 			mask &= ~mask_pos;
-
+			pr_info("----> 5 mask = %x, mask_pos = %x, submask = %x\n", mask, mask_pos, submask);
 			if (submask != mask_pos) {
 				dev_warn(pcs->dev,
 						"Invalid submask 0x%x for %pOFn at 0x%x\n",
@@ -1197,6 +1203,8 @@ static int pcs_parse_bits_in_pinctrl_entry(struct pcs_device *pcs,
 			vals[found].mask = submask;
 			vals[found].reg = pcs->base + offset;
 			vals[found].val = val_pos;
+
+			pr_info("---> vals[%d] mask=%x, reg=%x, val=%d\n", found, submask, offset, val_pos);
 
 			pin = pcs_get_pin_by_offset(pcs, offset);
 			if (pin < 0) {

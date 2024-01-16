@@ -311,6 +311,16 @@
 			riscv,ndev = <224>;
 		};
 
+		pinmux: pinmux@7030011000 {
+			compatible = "pinctrl-single";
+			reg = <0x00000070 0x30011000 0x00000000 0x00001000>;
+			#pinctrl-cells = <2>;
+			pinctrl-single,bit-per-mux;
+			pinctrl-single,register-width = <32>;
+			pinctrl-single,function-mask = <0x3>;
+			status = "disabled";
+		};
+
 		uart0: serial@7040000000 {
 			compatible = "snps,dw-apb-uart";
 			reg = <0x00000070 0x40000000 0x00000000 0x00001000>;
