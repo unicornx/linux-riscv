@@ -313,7 +313,7 @@
 
 		pinmux: pinmux@7030011000 {
 			compatible = "pinctrl-single";
-			reg = <0x00000070 0x30011000 0x00000000 0x00001000>;
+			reg = <0x00000070 0x30011000 0x00000000 0x00016c>;
 			#pinctrl-cells = <2>;
 			pinctrl-single,bit-per-mux;
 			pinctrl-single,register-width = <32>;
@@ -326,6 +326,17 @@
 			reg = <0x00000070 0x40000000 0x00000000 0x00001000>;
 			interrupt-parent = <&intc>;
 			interrupts = <112 IRQ_TYPE_LEVEL_HIGH>;
+			clock-frequency = <500000000>;
+			reg-shift = <2>;
+			reg-io-width = <4>;
+			status = "disabled";
+		};
+	
+		uart1: serial@7040001000 {
+			compatible = "snps,dw-apb-uart";
+			reg = <0x00000070 0x40001000 0x00000000 0x00001000>;
+			interrupt-parent = <&intc>;
+			interrupts = <113 IRQ_TYPE_LEVEL_HIGH>;
 			clock-frequency = <500000000>;
 			reg-shift = <2>;
 			reg-io-width = <4>;

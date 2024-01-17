@@ -1129,7 +1129,7 @@ static int pcs_parse_bits_in_pinctrl_entry(struct pcs_device *pcs,
 		dev_err(pcs->dev, "Invalid number of rows: %d\n", rows);
 		return -EINVAL;
 	}
-	pr_info("---> %s, rows = %d\n", __func__, rows);
+	pr_info("---> %s, np[%s] rows = %d\n", __func__, np->name, rows);
 	if (PCS_HAS_PINCONF) {
 		dev_err(pcs->dev, "pinconf not supported\n");
 		return -ENOTSUPP;
@@ -1214,6 +1214,7 @@ static int pcs_parse_bits_in_pinctrl_entry(struct pcs_device *pcs,
 				break;
 			}
 			pins[found++] = pin + pin_num_from_lsb;
+			pr_info("----> pin:%d, pins[%d] = %d\n", pin, (found - 1), pins[found - 1]);
 		}
 	}
 
