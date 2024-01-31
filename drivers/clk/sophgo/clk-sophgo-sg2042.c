@@ -1043,7 +1043,7 @@ static struct sg2042_mux_clock sg2042_mux_clks[] = {
 		   R_CLKSELREG0, 1, 1),
 };
 
-static DEFINE_SPINLOCK(sg2042_clk_lock);
+DEFINE_SPINLOCK(sg2042_clk_lock);
 
 static int sg2042_clk_register_plls(struct sg2042_clk_data *clk_data,
 				    struct sg2042_pll_clock pll_clks[],
