@@ -2,6 +2,7 @@
 #include <dt-bindings/clock/sophgo,sg2042-pll.h>
 #include <dt-bindings/clock/sophgo,sg2042-rpgate.h>
 #include <dt-bindings/clock/sophgo,sg2042-clkgen.h>
+#include <dt-bindings/reset/sophgo,sg2042-reset.h>
 #include <dt-bindings/gpio/gpio.h>
 #include <dt-bindings/input/input.h>
 #include <dt-bindings/reset/sophgo-mango-resets.h>
@@ -166,6 +167,12 @@
 				      "dpll0",
 				      "dpll1";
 			#clock-cells = <1>;
+		};
+
+		rstgen: reset-controller@7030013000 {
+			compatible = "sophgo,sg2042-reset";
+			reg = <0x00000070 0x30013000 0x00000000 0x0000000c>;
+			#reset-cells = <1>;
 		};
 
 		clint_mswi: clint-mswi@7094000000 {
@@ -519,14 +526,6 @@
 			reg = <0x70 0x30010000 0x0 0x8000>;
 		};
 
-		rst: reset-controller {
-			#reset-cells = <1>;
-			compatible = "bitmain,reset";
-			subctrl-syscon = <&top_misc>;
-			top_rst_offset = <0x3000>;
-			nr_resets = <RST_MAX_NUM>;
-		};
-
 		i2c0: i2c@7030005000 {
 			#address-cells = <1>;
 			#size-cells = <0>;
@@ -537,7 +536,7 @@
 			interrupt-parent = <&intc>;
 			interrupts = <SOC_PERIPHERAL_IRQ(101) IRQ_TYPE_LEVEL_HIGH>;
 			clock-frequency = <100000>;
-			resets = <&rst RST_I2C0>;
+			resets = <&rstgen RST_I2C0>;
 			reset-names = "i2c0";
 		};
 
@@ -551,7 +550,7 @@
 			interrupt-parent = <&intc>;
 			interrupts = <SOC_PERIPHERAL_IRQ(102) IRQ_TYPE_LEVEL_HIGH>;
 			clock-frequency = <100000>;
-			resets = <&rst RST_I2C1>;
+			resets = <&rstgen RST_I2C1>;
 			reset-names = "i2c1";
 		};
 
@@ -565,7 +564,7 @@
 			interrupt-parent = <&intc>;
 			interrupts = <SOC_PERIPHERAL_IRQ(103) IRQ_TYPE_LEVEL_HIGH>;
 			clock-frequency = <100000>;
-			resets = <&rst RST_I2C2>;
+			resets = <&rstgen RST_I2C2>;
 			reset-names = "i2c2";
 		};
 
@@ -579,7 +578,7 @@
 			interrupt-parent = <&intc>;
 			interrupts = <SOC_PERIPHERAL_IRQ(104) IRQ_TYPE_LEVEL_HIGH>;
 			clock-frequency = <100000>;
-			resets = <&rst RST_I2C3>;
+			resets = <&rstgen RST_I2C3>;
 			reset-names = "i2c3";
 		};
 
@@ -683,6 +682,7 @@
 			clock-names = "baudclk", "apb_pclk";
 			reg-shift = <2>;
 			reg-io-width = <4>;
+			resets = <&rstgen RST_UART0>;
 		};
 
 		uart1: serial@7040001000 {
@@ -734,7 +734,7 @@
 			non-removable;
 			no-sdio;
 			no-sd;
-			resets = <&rst RST_EMMC>;
+			resets = <&rstgen RST_EMMC>;
 			reset-names = "emmc";
 			clocks =
 				<&clkgen GATE_CLK_EMMC_100M>,
@@ -755,7 +755,7 @@
 			bus-width = <4>;
 			no-sdio;
 			no-mmc;
-			resets = <&rst RST_SD>;
+			resets = <&rstgen RST_SD>;
 			reset-names = "sdio";
 			clocks =
 				<&clkgen GATE_CLK_SD_100M>,
@@ -809,7 +809,7 @@
 			clocks = <&clkgen GATE_CLK_APB_SPI>,
 			          <&clkgen GATE_CLK_SYSDMA_AXI>;
 			clock-frequency = <250000000>;
-			resets = <&rst RST_SPI0>;
+			resets = <&rstgen RST_SPI0>;
 			reset-names = "spi0";
 			num-cs = <2>;
 			status = "okay";
@@ -825,7 +825,7 @@
 			clocks = <&clkgen GATE_CLK_APB_SPI>,
 			           <&clkgen GATE_CLK_SYSDMA_AXI>;
 			clock-frequency = <250000000>;
-			resets = <&rst RST_SPI1>;
+			resets = <&rstgen RST_SPI1>;
 			reset-names = "spi1";
 			num-cs = <2>;
 			status = "okay";
