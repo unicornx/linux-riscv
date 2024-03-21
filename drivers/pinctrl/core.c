@@ -540,6 +540,7 @@ EXPORT_SYMBOL_GPL(pinctrl_remove_gpio_range);
  */
 int pinctrl_generic_get_group_count(struct pinctrl_dev *pctldev)
 {
+	pr_info("---> %s, %d\n", __func__, pctldev->num_groups);
 	return pctldev->num_groups;
 }
 EXPORT_SYMBOL_GPL(pinctrl_generic_get_group_count);

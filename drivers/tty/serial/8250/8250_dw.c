@@ -514,6 +514,8 @@ static int dw8250_probe(struct platform_device *pdev)
 	int err;
 	u32 val;
 
+	pr_info("---> %s\n", __func__);
+
 	regs = platform_get_resource(pdev, IORESOURCE_MEM, 0);
 	if (!regs)
 		return dev_err_probe(dev, -EINVAL, "no registers defined\n");

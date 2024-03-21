@@ -34,6 +34,8 @@
 #include "pinconf.h"
 #include "pinmux.h"
 
+#include <asm/ptrace.h>
+
 #define DRIVER_NAME			"pinctrl-single"
 #define PCS_OFF_DISABLED		~0U
 
@@ -365,6 +367,8 @@ static int pcs_set_mux(struct pinctrl_dev *pctldev, unsigned fselector,
 	struct function_desc *function;
 	struct pcs_function *func;
 	int i;
+
+	dump_stack();
 
 	pcs = pinctrl_dev_get_drvdata(pctldev);
 	/* If function mask is null, needn't enable it. */
@@ -1173,7 +1177,7 @@ static int pcs_parse_bits_in_pinctrl_entry(struct pcs_device *pcs,
 		mask = pinctrl_spec.args[2];
 		//pr_info("----> 3\n");
 
-		pr_info("----> 3 %pOFn index: 0x%x value: 0x%x mask: 0x%x\n",
+		pr_info("----> 3 %pOFn offset: 0x%x value: 0x%x mask: 0x%x\n",
 			pinctrl_spec.np, offset, val, mask);
 		/* Parse pins in each row from LSB */
 		while (mask) {
@@ -1227,7 +1231,9 @@ static int pcs_parse_bits_in_pinctrl_entry(struct pcs_device *pcs,
 		goto free_pins;
 	}
 
+	pr_info("---> pinctrl_generic_add_group before, num_groups = %d\n", pcs->pctl->num_groups);
 	res = pinctrl_generic_add_group(pcs->pctl, np->name, pins, found, pcs);
+	pr_info("---> pinctrl_generic_add_group after, num_groups = %d\n", pcs->pctl->num_groups);
 	if (res < 0)
 		goto free_function;
 
@@ -1265,6 +1271,8 @@ static int pcs_dt_node_to_map(struct pinctrl_dev *pctldev,
 	struct pcs_device *pcs;
 	const char **pgnames;
 	int ret;
+
+	dump_stack();
 
 	pcs = pinctrl_dev_get_drvdata(pctldev);
 
