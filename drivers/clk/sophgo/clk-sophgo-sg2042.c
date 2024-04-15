@@ -6,7 +6,7 @@
  */
 
 #include <asm/div64.h>
-#include <linux/array_size.h>
+//#include <linux/array_size.h>
 #include <linux/bits.h>
 #include <linux/clk.h>
 #include <linux/clk-provider.h>
