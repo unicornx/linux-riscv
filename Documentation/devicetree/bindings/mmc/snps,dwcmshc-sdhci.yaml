@@ -21,6 +21,7 @@ properties:
       - snps,dwcmshc-sdhci
       - sophgo,cv1800b-dwcmshc
       - sophgo,sg2002-dwcmshc
+      - sophgo,sg2042-dwcmshc
       - thead,th1520-dwcmshc
 
   reg:
@@ -30,23 +31,36 @@ properties:
     maxItems: 1
 
   clocks:
-    minItems: 1
-    items:
-      - description: core clock
-      - description: bus clock for optional
-      - description: axi clock for rockchip specified
-      - description: block clock for rockchip specified
-      - description: timer clock for rockchip specified
+    anyOf:
+      - minItems: 1
+        items:
+          - description: core clock
+          - description: bus clock for optional
+          - description: axi clock for rockchip specified
+          - description: block clock for rockchip specified
+          - description: timer clock for rockchip specified
 
+      - minItems: 1
+        items:
+          - description: core clock
+          - description: timer clock
+          - description: card clock
 
   clock-names:
-    minItems: 1
-    items:
-      - const: core
-      - const: bus
-      - const: axi
-      - const: block
-      - const: timer
+    anyOf:
+      - minItems: 1
+        items:
+          - const: core
+          - const: bus
+          - const: axi
+          - const: block
+          - const: timer
+
+      - minItems: 1
+        items:
+          - const: core
+          - const: timer
+          - const: card
 
   resets:
     maxItems: 5
@@ -96,5 +110,26 @@ examples:
       #address-cells = <1>;
       #size-cells = <0>;
     };
-
+  - |
+    mmc@bb0000 {
+      compatible = "snps,dwcmshc-sdhci";
+      reg = <0xbb000 0x1000>;
+      interrupts = <0 25 0x4>;
+      clocks = <&cru 17>;
+      clock-names = "core";
+      bus-width = <8>;
+      #address-cells = <1>;
+      #size-cells = <0>;
+    };
+  - |
+    mmc@cc0000 {
+      compatible = "snps,dwcmshc-sdhci";
+      reg = <0xcc000 0x1000>;
+      interrupts = <0 25 0x4>;
+      clocks = <&cru 17>, <&cru 18>, <&cru 19>;
+      clock-names = "core", "timer", "card";
+      bus-width = <8>;
+      #address-cells = <1>;
+      #size-cells = <0>;
+    };
 ...
