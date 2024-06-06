@@ -5,7 +5,6 @@
  * Copyright (C) 2024 Sophgo Technology Inc. All rights reserved.
  */
 
-#include <linux/array_size.h>
 #include <linux/bits.h>
 #include <linux/clk.h>
 #include <linux/clk-provider.h>
