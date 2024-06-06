@@ -18,6 +18,11 @@
 
 #include "clk-sg2042.h"
 
+static inline unsigned long abs_diff(unsigned long a, unsigned long b)
+{
+	return (a > b) ? (a - b) : (b - a);
+}
+
 /* Registers defined in SYS_CTRL */
 #define R_PLL_BEGIN		0xC0
 #define R_PLL_STAT		(0xC0 - R_PLL_BEGIN)
