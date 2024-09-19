@@ -12,6 +12,9 @@
 #include <linux/irqchip/chained_irq.h>
 #include <linux/platform_device.h>
 #include <linux/pm_runtime.h>
+#include <linux/mfd/syscon.h>
+#include <linux/regmap.h>
+
 
 #include "pcie-cadence.h"
 #include "pcie-cadence-sophgo.h"
@@ -23,11 +26,6 @@
 #define BYTE_NUM_PER_MSI_VEC		4
 
 // mango sideband signals
-#define CDNS_PCIE_CFG_MANGO_APB     0x1800000
-#define CDNS_PCIE_IRS_REG0400       0x0400
-#define CDNS_PCIE_IRS_REG0404       0x0404
-#define CDNS_PCIE_IRS_REG0418       0x0418
-#define CDNS_PCIE_IRS_REG041C       0x041C
 #define CDNS_PCIE_IRS_REG0804       0x0804
 #define CDNS_PCIE_IRS_REG080C       0x080C
 #define CDNS_PCIE_IRS_REG0810       0x0810
@@ -43,12 +41,6 @@
 #define CDNS_PCIE_IRS_REG0810_ST_LINK1_MSI_IN_BIT		3
 
 #define CDNS_PLAT_CPU_TO_BUS_ADDR       0xCFFFFFFFFF
-
-struct cdns_pcie_database {
-	void __iomem *pcie_reg_base;
-};
-
-static struct cdns_pcie_database cdns_pcie_db;
 
 static inline void cdns_pcie_rp_writel(struct cdns_pcie *pcie,
 				       u32 reg, u32 value)
@@ -103,6 +95,7 @@ struct cdns_mango_pcie_rc {
 	struct pci_bus		*root_bus;
 	raw_spinlock_t		lock;
 	DECLARE_BITMAP(msi_irq_in_use, MAX_MSI_IRQS);
+	struct regmap		*syscon;
 };
 
 static u64 cdns_mango_cpu_addr_fixup(struct cdns_pcie *pcie, u64 cpu_addr)
@@ -361,7 +354,6 @@ static int cdns_pcie_msi_init(struct cdns_mango_pcie_rc *rc)
 {
 	struct device *dev = rc->dev;
 	struct cdns_pcie *pcie = &rc->pcie;
-	u32 apb_base = CDNS_PCIE_CFG_MANGO_APB;
 	u64 msi_target = 0;
 	u32 value = 0;
 
@@ -375,26 +367,25 @@ static int cdns_pcie_msi_init(struct cdns_mango_pcie_rc *rc)
 	msi_target = (u64)rc->msi_data;
 
 	if (rc->link_id == 1) {
-		apb_base -= 0x800000;
 		/* Program the msi_data */
-		cdns_pcie_writel(pcie, (apb_base + CDNS_PCIE_IRS_REG0868),
+		regmap_write(rc->syscon, CDNS_PCIE_IRS_REG0868,
 				 lower_32_bits(msi_target));
-		cdns_pcie_writel(pcie, (apb_base + CDNS_PCIE_IRS_REG086C),
+		regmap_write(rc->syscon, CDNS_PCIE_IRS_REG086C,
 				 upper_32_bits(msi_target));
 
-		value = cdns_pcie_readl(pcie, (apb_base + CDNS_PCIE_IRS_REG080C));
+		regmap_read(rc->syscon, CDNS_PCIE_IRS_REG080C, &value);
 		value = (value & 0xffff0000) | MAX_MSI_IRQS;
-		cdns_pcie_writel(pcie, (apb_base + CDNS_PCIE_IRS_REG080C), value);
+		regmap_write(rc->syscon, CDNS_PCIE_IRS_REG080C, value);
 	} else {
 		/* Program the msi_data */
-		cdns_pcie_writel(pcie, (apb_base + CDNS_PCIE_IRS_REG0860),
+		regmap_write(rc->syscon, CDNS_PCIE_IRS_REG0860,
 				 lower_32_bits(msi_target));
-		cdns_pcie_writel(pcie, (apb_base + CDNS_PCIE_IRS_REG0864),
+		regmap_write(rc->syscon, CDNS_PCIE_IRS_REG0864,
 				 upper_32_bits(msi_target));
 
-		value = cdns_pcie_readl(pcie, (apb_base + CDNS_PCIE_IRS_REG085C));
+		regmap_read(rc->syscon, CDNS_PCIE_IRS_REG085C, &value);
 		value = (value & 0x0000ffff) | (MAX_MSI_IRQS << 16);
-		cdns_pcie_writel(pcie, (apb_base + CDNS_PCIE_IRS_REG085C), value);
+		regmap_write(rc->syscon, CDNS_PCIE_IRS_REG085C, value);
 	}
 
 	return 0;
@@ -568,13 +559,11 @@ static irqreturn_t cdns_pcie_irq_handler(int irq, void *arg)
 {
 	struct cdns_mango_pcie_rc *rc = arg;
 	struct cdns_pcie *pcie = &rc->pcie;
-	u32 apb_base = CDNS_PCIE_CFG_MANGO_APB;
 	u32 status = 0;
 	u32 st_msi_in_bit = 0;
 	u32 clr_msi_in_bit = 0;
 
 	if (rc->link_id == 1) {
-		apb_base -= 0x800000;
 		st_msi_in_bit = CDNS_PCIE_IRS_REG0810_ST_LINK1_MSI_IN_BIT;
 		clr_msi_in_bit = CDNS_PCIE_IRS_REG0804_CLR_LINK1_MSI_IN_BIT;
 	} else {
@@ -582,17 +571,17 @@ static irqreturn_t cdns_pcie_irq_handler(int irq, void *arg)
 		clr_msi_in_bit = CDNS_PCIE_IRS_REG0804_CLR_LINK0_MSI_IN_BIT;
 	}
 
-	status = cdns_pcie_readl(pcie, (apb_base + CDNS_PCIE_IRS_REG0810));
+	regmap_read(rc->syscon, CDNS_PCIE_IRS_REG0810, &status);
 	if ((status >> st_msi_in_bit) & 0x1) {
 		WARN_ON(!IS_ENABLED(CONFIG_PCI_MSI));
 
 		//clear msi interrupt bit reg0810[2]
-		status = cdns_pcie_readl(pcie, (apb_base + CDNS_PCIE_IRS_REG0804));
+		regmap_read(rc->syscon, CDNS_PCIE_IRS_REG0804, &status);
 		status |= ((u32)0x1 << clr_msi_in_bit);
-		cdns_pcie_writel(pcie, (apb_base + CDNS_PCIE_IRS_REG0804), status);
+		regmap_write(rc->syscon, CDNS_PCIE_IRS_REG0804, status);
 
 		status &= ~((u32)0x1 << clr_msi_in_bit);
-		cdns_pcie_writel(pcie, (apb_base + CDNS_PCIE_IRS_REG0804), status);
+		regmap_write(rc->syscon, CDNS_PCIE_IRS_REG0804, status);
 
 		cdns_handle_msi_irq(rc);
 	}
@@ -606,7 +595,6 @@ static void cdns_chained_msi_isr(struct irq_desc *desc)
 	struct irq_chip *chip = irq_desc_get_chip(desc);
 	struct cdns_mango_pcie_rc *rc;
 	struct cdns_pcie *pcie;
-	u32 apb_base = CDNS_PCIE_CFG_MANGO_APB;
 	u32 status = 0;
 	u32 st_msi_in_bit = 0;
 	u32 clr_msi_in_bit = 0;
@@ -616,7 +604,6 @@ static void cdns_chained_msi_isr(struct irq_desc *desc)
 	rc = irq_desc_get_handler_data(desc);
 	pcie = &rc->pcie;
 	if (rc->link_id == 1) {
-		apb_base -= 0x800000;
 		st_msi_in_bit = CDNS_PCIE_IRS_REG0810_ST_LINK1_MSI_IN_BIT;
 		clr_msi_in_bit = CDNS_PCIE_IRS_REG0804_CLR_LINK1_MSI_IN_BIT;
 	} else {
@@ -624,17 +611,17 @@ static void cdns_chained_msi_isr(struct irq_desc *desc)
 		clr_msi_in_bit = CDNS_PCIE_IRS_REG0804_CLR_LINK0_MSI_IN_BIT;
 	}
 
-	status = cdns_pcie_readl(pcie, (apb_base + CDNS_PCIE_IRS_REG0810));
+	regmap_read(rc->syscon, CDNS_PCIE_IRS_REG0810, &status);
 	if ((status >> st_msi_in_bit) & 0x1) {
 		WARN_ON(!IS_ENABLED(CONFIG_PCI_MSI));
 
 		//clear msi interrupt bit reg0810[2]
-		status = cdns_pcie_readl(pcie, (apb_base + CDNS_PCIE_IRS_REG0804));
+		regmap_read(rc->syscon, CDNS_PCIE_IRS_REG0804, &status);
 		status |= ((u32)0x1 << clr_msi_in_bit);
-		cdns_pcie_writel(pcie, (apb_base + CDNS_PCIE_IRS_REG0804), status);
+		regmap_write(rc->syscon, CDNS_PCIE_IRS_REG0804, status);
 
 		status &= ~((u32)0x1 << clr_msi_in_bit);
-		cdns_pcie_writel(pcie, (apb_base + CDNS_PCIE_IRS_REG0804), status);
+		regmap_write(rc->syscon, CDNS_PCIE_IRS_REG0804, status);
 
 		cdns_handle_msi_irq(rc);
 	}
@@ -803,6 +790,7 @@ static int cdns_pcie_host_probe(struct platform_device *pdev)
 {
 	struct device *dev = &pdev->dev;
 	struct device_node *np = dev->of_node;
+	struct device_node *np_top;
 	struct pci_host_bridge *bridge;
 	struct cdns_mango_pcie_rc *rc;
 	struct cdns_pcie *pcie;
@@ -810,6 +798,8 @@ static int cdns_pcie_host_probe(struct platform_device *pdev)
 	int ret;
 	int phy_count;
 	int top_intc_id = -1;
+
+	struct regmap *syscon;
 
 	bridge = devm_pci_alloc_host_bridge(dev, sizeof(*rc));
 	if (!bridge)
@@ -821,6 +811,18 @@ static int cdns_pcie_host_probe(struct platform_device *pdev)
 	pcie = &rc->pcie;
 	pcie->is_rc = true;
 	pcie->ops = &cdns_mango_ops;
+
+	np_top = of_parse_phandle(np, "pcie-syscon", 0);
+	if (!np_top) {
+		dev_err(dev, "%s can't get pcie-syscon node\n", __func__);
+		return -ENOMEM;
+	}
+	syscon = syscon_node_to_regmap(np_top);
+	if (IS_ERR(syscon)) {
+		dev_err(dev, "cannot get regmap\n");
+		return -ENOMEM;
+	}
+	rc->syscon = syscon;
 
 	rc->max_regions = 32;
 	of_property_read_u32(np, "cdns,max-outbound-regions", &rc->max_regions);
@@ -848,16 +850,11 @@ static int cdns_pcie_host_probe(struct platform_device *pdev)
 	if (rc->top_intc_used == 1)
 		of_property_read_u32(np, "top-intc-id", &top_intc_id);
 
-	if (rc->link_id == 0) {
-		res = platform_get_resource_byname(pdev, IORESOURCE_MEM, "reg");
-		pcie->reg_base = devm_ioremap_resource(dev, res);
-		if (IS_ERR(pcie->reg_base)) {
-			dev_err(dev, "missing \"reg\"\n");
-			return PTR_ERR(pcie->reg_base);
-		}
-		cdns_pcie_db.pcie_reg_base = pcie->reg_base;
-	} else if (rc->link_id == 1) {
-		pcie->reg_base = cdns_pcie_db.pcie_reg_base + 0x800000;
+	res = platform_get_resource_byname(pdev, IORESOURCE_MEM, "reg");
+	pcie->reg_base = devm_ioremap_resource(dev, res);
+	if (IS_ERR(pcie->reg_base)) {
+		dev_err(dev, "missing \"reg\"\n");
+		return PTR_ERR(pcie->reg_base);
 	}
 
 	res = platform_get_resource_byname(pdev, IORESOURCE_MEM, "cfg");
