@@ -42,58 +42,8 @@
 
 #define CDNS_PLAT_CPU_TO_BUS_ADDR       0xCFFFFFFFFF
 
-static inline void cdns_pcie_rp_writel(struct cdns_pcie *pcie,
-				       u32 reg, u32 value)
-{
-	writel(value, pcie->reg_base + CDNS_PCIE_RP_BASE + reg);
-}
-
-static inline u32 cdns_pcie_rp_readl(struct cdns_pcie *pcie,
-				       u32 reg)
-{
-	return readl(pcie->reg_base + CDNS_PCIE_RP_BASE + reg);
-}
-
-/**
- * struct cdns_mango_pcie_rc - private data for this PCIe Root Complex driver
- * @pcie: Cadence PCIe controller
- * @cfg_res: start/end offsets in the physical system memory to map PCI
- *           configuration space accesses
- * @cfg_base: IO mapped window to access the PCI configuration space of a
- *            single function at a time
- * @no_bar_nbits: Number of bits to keep for inbound (PCIe -> CPU) address
- *                translation (nbits sets into the "no BAR match" register)
- * @vendor_id: PCI vendor ID
- * @device_id: PCI device ID
- * @pcie_id:
- * @link_id:
- * @top_intc_used:
- * @msix_supported:
- * @msi_domain:
- * @msi_irq:
- * @irq_domain:
- * @msi_data:
- * @msi_page:
- * @msi_irq_chip:
- * @num_vectors:
- * @num_applied_vecs:
- * @irq_mask:
- * @lock:
- * @msi_irq_in_use:
- * @syscon:
- */
-struct cdns_mango_pcie_rc {
-	// members from struct cdns_pcie_rc
-	struct cdns_pcie	pcie;
-	struct resource		*cfg_res;
-	void __iomem		*cfg_base;
-	u16			vendor_id;
-	u16			device_id;
-
-	// in pcie-cadence-host.c, this member is not needed
-	// "cdns,no-bar-match-nbits" will be fetched when it is used
-	// see cdns_pcie_host_map_dma_ranges()
-	u32			no_bar_nbits;
+struct sg2042_pcie {
+	struct cdns_pcie	*cdns_pcie;
 
 	// Fully private members for sg2042
 	u16			pcie_id;
@@ -122,63 +72,6 @@ static u64 cdns_mango_cpu_addr_fixup(struct cdns_pcie *pcie, u64 cpu_addr)
 static const struct cdns_pcie_ops cdns_mango_ops = {
 	.cpu_addr_fixup = cdns_mango_cpu_addr_fixup,
 };
-
-// 这个函数和 pcie-cadence-host.c 中的 cdns_pci_map_bus 几乎完全一样，除了将
-// cdns_pcie_rc 替换成 cdns_mango_pcie_rc
-// 参考 drivers/pci/controller/cadence/pci-j721e.c
-// static struct pci_ops cdns_ti_pcie_host_ops = {
-//	.map_bus	= cdns_pci_map_bus,
-//	...
-// };
-// 所以 cdns_pcie_host_ops 中的 .map_bus 可以直接用 cdns_pci_map_bus 替换
-// 这个函数可以删掉
-static void __iomem *cdns_mango_pci_map_bus(struct pci_bus *bus, unsigned int devfn,
-					    int where)
-{
-	struct pci_host_bridge *bridge = pci_find_host_bridge(bus);
-	struct cdns_mango_pcie_rc *rc = pci_host_bridge_priv(bridge);
-	struct cdns_pcie *pcie = &rc->pcie;
-	unsigned int busn = bus->number;
-	u32 addr0, desc0;
-
-	if (pci_is_root_bus(bus)) {
-		/*
-		 * Only the root port (devfn == 0) is connected to this bus.
-		 * All other PCI devices are behind some bridge hence on another
-		 * bus.
-		 */
-		if (devfn)
-			return NULL;
-
-		return pcie->reg_base + CDNS_PCIE_RP_BASE + (where & 0xfff);
-	}
-	/* Check that the link is up */
-	if (!(cdns_pcie_readl(pcie, CDNS_PCIE_LM_BASE) & 0x1))
-		return NULL;
-	/* Clear AXI link-down status */
-	cdns_pcie_writel(pcie, CDNS_PCIE_AT_LINKDOWN, 0x0);
-
-	/* Update Output registers for AXI region 0. */
-	addr0 = CDNS_PCIE_AT_OB_REGION_PCI_ADDR0_NBITS(12) |
-		CDNS_PCIE_AT_OB_REGION_PCI_ADDR0_DEVFN(devfn) |
-		CDNS_PCIE_AT_OB_REGION_PCI_ADDR0_BUS(busn);
-	cdns_pcie_writel(pcie, CDNS_PCIE_AT_OB_REGION_PCI_ADDR0(0), addr0);
-
-	/* Configuration Type 0 or Type 1 access. */
-	desc0 = CDNS_PCIE_AT_OB_REGION_DESC0_HARDCODED_RID |
-		CDNS_PCIE_AT_OB_REGION_DESC0_DEVFN(0);
-	/*
-	 * The bus number was already set once for all in desc1 by
-	 * cdns_pcie_host_init_address_translation().
-	 */
-	if (busn == bridge->busnr + 1)
-		desc0 |= CDNS_PCIE_AT_OB_REGION_DESC0_TYPE_CONF_TYPE0;
-	else
-		desc0 |= CDNS_PCIE_AT_OB_REGION_DESC0_TYPE_CONF_TYPE1;
-	cdns_pcie_writel(pcie, CDNS_PCIE_AT_OB_REGION_DESC0(0), desc0);
-
-	return rc->cfg_base + (where & 0xfff);
-}
 
 // cdns_pcie_config_read 和 cdns_pcie_config_write
 // 我测试了一下，竟然可以直接用 drivers/pci/controller/cadence/pci-j721e.c
@@ -259,7 +152,7 @@ static int cdns_pcie_config_write(struct pci_bus *bus, unsigned int devfn,
 
 
 static struct pci_ops cdns_pcie_host_ops = {
-	.map_bus	= cdns_mango_pci_map_bus,
+	.map_bus	= cdns_pci_map_bus,
 	.read		= cdns_pcie_config_read,
 	.write		= cdns_pcie_config_write,
 };
@@ -270,207 +163,46 @@ static const struct of_device_id cdns_pcie_host_of_match[] = {
 	{ },
 };
 
-// 和 drivers/pci/controller/cadence/pcie-cadence-host.c 中的
-// cdns_pcie_host_init_root_port 函数几乎一样，感觉可以替换掉
-// cadence host 中函数调用关系如下
-// cdns_pcie_host_setup
-// -> cdns_pcie_host_init
-//    -> cdns_pcie_host_init_root_port
-// mango 的函数调用关系如下：
-// cdns_pcie_host_probe
-// -> cdns_pcie_host_init
-//    -> cdns_pcie_host_init_root_port
-static int cdns_pcie_host_init_root_port(struct cdns_mango_pcie_rc *rc)
-{
-	struct cdns_pcie *pcie = &rc->pcie;
-	u32 value, ctrl;
-	u32 id;
-
-	/*
-	 * Set the root complex BAR configuration register:
-	 * - disable both BAR0 and BAR1.
-	 * - enable Prefetchable Memory Base and Limit registers in type 1
-	 *   config space (64 bits).
-	 * - enable IO Base and Limit registers in type 1 config
-	 *   space (32 bits).
-	 */
-	ctrl = CDNS_PCIE_LM_BAR_CFG_CTRL_DISABLED;
-	value = CDNS_PCIE_LM_RC_BAR_CFG_BAR0_CTRL(ctrl) |
-		CDNS_PCIE_LM_RC_BAR_CFG_BAR1_CTRL(ctrl) |
-		CDNS_PCIE_LM_RC_BAR_CFG_PREFETCH_MEM_ENABLE |
-		CDNS_PCIE_LM_RC_BAR_CFG_PREFETCH_MEM_64BITS |
-		CDNS_PCIE_LM_RC_BAR_CFG_IO_ENABLE |
-		CDNS_PCIE_LM_RC_BAR_CFG_IO_32BITS;
-	cdns_pcie_writel(pcie, CDNS_PCIE_LM_RC_BAR_CFG, value);
-
-	/* Set root port configuration space */
-	if (rc->vendor_id != 0xffff) {
-		id = CDNS_PCIE_LM_ID_VENDOR(rc->vendor_id) |
-			CDNS_PCIE_LM_ID_SUBSYS(rc->vendor_id);
-		cdns_pcie_writel(pcie, CDNS_PCIE_LM_ID, id);
-	}
-
-	if (rc->device_id != 0xffff) {
-		value = cdns_pcie_rp_readl(pcie, PCI_VENDOR_ID);
-		value &= 0x0000FFFF;
-		value |= (rc->device_id << 16);
-		cdns_pcie_rp_writel(pcie, PCI_VENDOR_ID, value);
-	}
-
-	cdns_pcie_rp_writel(pcie, PCI_CLASS_REVISION, PCI_CLASS_BRIDGE_PCI << 16);
-
-	return 0;
-}
-
-// 和 drivers/pci/controller/cadence/pcie-cadence-host.c 中的
-// cdns_pcie_host_init_root_port 函数几乎一样，感觉可以替换掉
-// 唯一的区别是 cadence-host 中该函数最后调用 cdns_pcie_host_map_dma_ranges()
-// 而本函数这里执行了一段自己的逻辑，但经过分析发现这么写有可能是为了避免照抄
-// cadence-host 引入更多的函数，加了 log 后发现实际效果和在 cadence-host 中
-// 执行的路径 cdns_pcie_host_map_dma_ranges -> cdns_pcie_host_bar_ib_config
-// -> bar == RP_NO_BAR return 0 的效果是一样的。
-// cadence host 中函数调用关系如下
-// cdns_pcie_host_setup
-// -> cdns_pcie_host_init
-//    -> cdns_pcie_host_init_address_translation
-// mango 的函数调用关系如下：
-// cdns_pcie_host_probe
-// -> cdns_pcie_host_init
-//    -> cdns_pcie_host_init_address_translation
-static int cdns_pcie_host_init_address_translation(struct cdns_mango_pcie_rc *rc)
-{
-	struct cdns_pcie *pcie = &rc->pcie;
-	struct pci_host_bridge *bridge = pci_host_bridge_from_priv(rc);
-	struct resource *cfg_res = rc->cfg_res;
-	struct resource_entry *entry = NULL;
-	u32 addr0, addr1, desc1;
-	u64 cpu_addr;
-	int r, busnr = 0;
-
-	entry = resource_list_first_type(&bridge->windows, IORESOURCE_BUS);
-	if (entry)
-		busnr = entry->res->start;
-
-	/*
-	 * Reserve region 0 for PCI configure space accesses:
-	 * OB_REGION_PCI_ADDR0 and OB_REGION_DESC0 are updated dynamically by
-	 * cdns_pci_map_bus(), other region registers are set here once for all.
-	 */
-	addr1 = 0; /* Should be programmed to zero. */
-	desc1 = CDNS_PCIE_AT_OB_REGION_DESC1_BUS(busnr);
-	cdns_pcie_writel(pcie, CDNS_PCIE_AT_OB_REGION_PCI_ADDR1(0), addr1);
-	cdns_pcie_writel(pcie, CDNS_PCIE_AT_OB_REGION_DESC1(0), desc1);
-
-	cpu_addr = cfg_res->start;
-	addr0 = CDNS_PCIE_AT_OB_REGION_CPU_ADDR0_NBITS(12) |
-		(lower_32_bits(cpu_addr) & GENMASK(31, 8));
-	addr1 = upper_32_bits(cpu_addr);
-	cdns_pcie_writel(pcie, CDNS_PCIE_AT_OB_REGION_CPU_ADDR0(0), addr0);
-	cdns_pcie_writel(pcie, CDNS_PCIE_AT_OB_REGION_CPU_ADDR1(0), addr1);
-
-	r = 1;
-	resource_list_for_each_entry(entry, &bridge->windows) {
-		struct resource *res = entry->res;
-		u64 pci_addr = res->start - entry->offset;
-
-		if (resource_type(res) == IORESOURCE_IO)
-			cdns_pcie_set_outbound_region(pcie, busnr, 0, r,
-						      true,
-						      pci_pio_to_address(res->start),
-						      pci_addr,
-						      resource_size(res));
-		else
-			cdns_pcie_set_outbound_region(pcie, busnr, 0, r,
-						      false,
-						      res->start,
-						      pci_addr,
-						      resource_size(res));
-
-		r++;
-	}
-
-	/*
-	 * Set Root Port no BAR match Inbound Translation registers:
-	 * needed for MSI and DMA.
-	 * Root Port BAR0 and BAR1 are disabled, hence no need to set their
-	 * inbound translation registers.
-	 */
-	addr0 = CDNS_PCIE_AT_IB_RP_BAR_ADDR0_NBITS(rc->no_bar_nbits);
-	addr1 = 0;
-	cdns_pcie_writel(pcie, CDNS_PCIE_AT_IB_RP_BAR_ADDR0(RP_NO_BAR), addr0);
-	cdns_pcie_writel(pcie, CDNS_PCIE_AT_IB_RP_BAR_ADDR1(RP_NO_BAR), addr1);
-
-	return 0;
-}
-
 // 这是 mango 自己定义的函数，会保留
-static int cdns_pcie_msi_init(struct cdns_mango_pcie_rc *rc)
+static int cdns_pcie_msi_init(struct sg2042_pcie *pcie)
 {
-	struct device *dev = rc->pcie.dev;
+	struct device *dev = pcie->cdns_pcie->dev;
 	u64 msi_target = 0;
 	u32 value = 0;
 
 	// support 512 msi vectors
-	rc->msi_page = dma_alloc_coherent(dev, 2048, &rc->msi_data,
+	pcie->msi_page = dma_alloc_coherent(dev, 2048, &pcie->msi_data,
 					  (GFP_KERNEL|GFP_DMA32|__GFP_ZERO));
-	if (rc->msi_page == NULL)
+	if (pcie->msi_page == NULL)
 		return -1;
 
-	dev_info(dev, "msi_data is 0x%llx\n", rc->msi_data);
-	msi_target = (u64)rc->msi_data;
+	dev_info(dev, "msi_data is 0x%llx\n", pcie->msi_data);
+	msi_target = (u64)pcie->msi_data;
 
-	if (rc->link_id == 1) {
+	if (pcie->link_id == 1) {
 		/* Program the msi_data */
-		regmap_write(rc->syscon, CDNS_PCIE_IRS_REG0868,
+		regmap_write(pcie->syscon, CDNS_PCIE_IRS_REG0868,
 				 lower_32_bits(msi_target));
-		regmap_write(rc->syscon, CDNS_PCIE_IRS_REG086C,
+		regmap_write(pcie->syscon, CDNS_PCIE_IRS_REG086C,
 				 upper_32_bits(msi_target));
 
-		regmap_read(rc->syscon, CDNS_PCIE_IRS_REG080C, &value);
+		regmap_read(pcie->syscon, CDNS_PCIE_IRS_REG080C, &value);
 		value = (value & 0xffff0000) | MAX_MSI_IRQS;
-		regmap_write(rc->syscon, CDNS_PCIE_IRS_REG080C, value);
+		regmap_write(pcie->syscon, CDNS_PCIE_IRS_REG080C, value);
 	} else {
 		/* Program the msi_data */
-		regmap_write(rc->syscon, CDNS_PCIE_IRS_REG0860,
+		regmap_write(pcie->syscon, CDNS_PCIE_IRS_REG0860,
 				 lower_32_bits(msi_target));
-		regmap_write(rc->syscon, CDNS_PCIE_IRS_REG0864,
+		regmap_write(pcie->syscon, CDNS_PCIE_IRS_REG0864,
 				 upper_32_bits(msi_target));
 
-		regmap_read(rc->syscon, CDNS_PCIE_IRS_REG085C, &value);
+		regmap_read(pcie->syscon, CDNS_PCIE_IRS_REG085C, &value);
 		value = (value & 0x0000ffff) | (MAX_MSI_IRQS << 16);
-		regmap_write(rc->syscon, CDNS_PCIE_IRS_REG085C, value);
+		regmap_write(pcie->syscon, CDNS_PCIE_IRS_REG085C, value);
 	}
 
 	return 0;
 }
-
-// 这个函数和 cadence-host 中的 cdns_pcie_host_init 很像
-// 唯一的区别是后面有一段 mango 自己的初始化逻辑
-// 如果要改造，得想办法把这一段逻辑移到 cdns_pcie_host_setup 调用之外？FIXME
-static int cdns_pcie_host_init(struct device *dev, struct cdns_mango_pcie_rc *rc)
-{
-	int err;
-
-	err = cdns_pcie_host_init_root_port(rc);
-	if (err)
-		return err;
-
-	err = cdns_pcie_host_init_address_translation(rc);
-	if (err)
-		return err;
-
-	if (rc->top_intc_used == 0) {
-		rc->num_vectors = MSI_DEF_NUM_VECTORS;
-		rc->num_applied_vecs = 0;
-		if (IS_ENABLED(CONFIG_PCI_MSI)) {
-			err = cdns_pcie_msi_init(rc);
-			if (err)
-				return err;
-		}
-	}
-	return 0;
-}
-
 
 //////////////////////////////////////////////////////////////////
 // mango 私有逻辑，需要保留
@@ -549,23 +281,23 @@ int check_vendor_id(struct pci_dev *dev, struct vendor_id_list vendor_id_list[],
 }
 
 
-static int cdns_pcie_msi_setup_for_top_intc(struct cdns_mango_pcie_rc *rc, int intc_id)
+static int cdns_pcie_msi_setup_for_top_intc(struct sg2042_pcie *pcie, int intc_id)
 {
 	struct irq_domain *irq_parent = cdns_pcie_get_parent_irq_domain(intc_id);
-	struct device *dev = rc->pcie.dev;
+	struct device *dev = pcie->cdns_pcie->dev;
 	struct fwnode_handle *fwnode = of_node_to_fwnode(dev->of_node);
 
-	if (rc->msix_supported == 1) {
-		rc->msi_domain = pci_msi_create_irq_domain(fwnode,
+	if (pcie->msix_supported == 1) {
+		pcie->msi_domain = pci_msi_create_irq_domain(fwnode,
 							   &cdns_pcie_top_intr_msi_domain_info,
 							   irq_parent);
 	} else {
-		rc->msi_domain = pci_msi_create_irq_domain(fwnode,
+		pcie->msi_domain = pci_msi_create_irq_domain(fwnode,
 							   &cdns_pcie_msi_domain_info,
 							   irq_parent);
 	}
 
-	if (!rc->msi_domain) {
+	if (!pcie->msi_domain) {
 		dev_err(dev, "create msi irq domain failed\n");
 		return -ENODEV;
 	}
@@ -574,16 +306,16 @@ static int cdns_pcie_msi_setup_for_top_intc(struct cdns_mango_pcie_rc *rc, int i
 }
 
 /* MSI int handler */
-static irqreturn_t cdns_handle_msi_irq(struct cdns_mango_pcie_rc *rc)
+static irqreturn_t cdns_handle_msi_irq(struct sg2042_pcie *pcie)
 {
 	u32 i, pos, irq;
 	unsigned long val;
 	u32 status, num_vectors;
 	irqreturn_t ret = IRQ_NONE;
 
-	num_vectors = rc->num_applied_vecs;
+	num_vectors = pcie->num_applied_vecs;
 	for (i = 0; i <= num_vectors; i++) {
-		status = readl((void *)(rc->msi_page + i * BYTE_NUM_PER_MSI_VEC));
+		status = readl((void *)(pcie->msi_page + i * BYTE_NUM_PER_MSI_VEC));
 		if (!status)
 			continue;
 
@@ -592,19 +324,19 @@ static irqreturn_t cdns_handle_msi_irq(struct cdns_mango_pcie_rc *rc)
 		pos = 0;
 		while ((pos = find_next_bit(&val, MAX_MSI_IRQS_PER_CTRL,
 					    pos)) != MAX_MSI_IRQS_PER_CTRL) {
-			irq = irq_find_mapping(rc->irq_domain,
+			irq = irq_find_mapping(pcie->irq_domain,
 					       (i * MAX_MSI_IRQS_PER_CTRL) +
 					       pos);
 			generic_handle_irq(irq);
 			pos++;
 		}
-		writel(0, ((void *)(rc->msi_page) + i * BYTE_NUM_PER_MSI_VEC));
+		writel(0, ((void *)(pcie->msi_page) + i * BYTE_NUM_PER_MSI_VEC));
 	}
 	if (ret == IRQ_NONE) {
 		ret = IRQ_HANDLED;
 		for (i = 0; i <= num_vectors; i++) {
 			for (pos = 0; pos < MAX_MSI_IRQS_PER_CTRL; pos++) {
-				irq = irq_find_mapping(rc->irq_domain,
+				irq = irq_find_mapping(pcie->irq_domain,
 						       (i * MAX_MSI_IRQS_PER_CTRL) +
 						       pos);
 				if (!irq)
@@ -619,12 +351,12 @@ static irqreturn_t cdns_handle_msi_irq(struct cdns_mango_pcie_rc *rc)
 
 static irqreturn_t cdns_pcie_irq_handler(int irq, void *arg)
 {
-	struct cdns_mango_pcie_rc *rc = arg;
+	struct sg2042_pcie *pcie = arg;
 	u32 status = 0;
 	u32 st_msi_in_bit = 0;
 	u32 clr_msi_in_bit = 0;
 
-	if (rc->link_id == 1) {
+	if (pcie->link_id == 1) {
 		st_msi_in_bit = CDNS_PCIE_IRS_REG0810_ST_LINK1_MSI_IN_BIT;
 		clr_msi_in_bit = CDNS_PCIE_IRS_REG0804_CLR_LINK1_MSI_IN_BIT;
 	} else {
@@ -632,19 +364,19 @@ static irqreturn_t cdns_pcie_irq_handler(int irq, void *arg)
 		clr_msi_in_bit = CDNS_PCIE_IRS_REG0804_CLR_LINK0_MSI_IN_BIT;
 	}
 
-	regmap_read(rc->syscon, CDNS_PCIE_IRS_REG0810, &status);
+	regmap_read(pcie->syscon, CDNS_PCIE_IRS_REG0810, &status);
 	if ((status >> st_msi_in_bit) & 0x1) {
 		WARN_ON(!IS_ENABLED(CONFIG_PCI_MSI));
 
 		//clear msi interrupt bit reg0810[2]
-		regmap_read(rc->syscon, CDNS_PCIE_IRS_REG0804, &status);
+		regmap_read(pcie->syscon, CDNS_PCIE_IRS_REG0804, &status);
 		status |= ((u32)0x1 << clr_msi_in_bit);
-		regmap_write(rc->syscon, CDNS_PCIE_IRS_REG0804, status);
+		regmap_write(pcie->syscon, CDNS_PCIE_IRS_REG0804, status);
 
 		status &= ~((u32)0x1 << clr_msi_in_bit);
-		regmap_write(rc->syscon, CDNS_PCIE_IRS_REG0804, status);
+		regmap_write(pcie->syscon, CDNS_PCIE_IRS_REG0804, status);
 
-		cdns_handle_msi_irq(rc);
+		cdns_handle_msi_irq(pcie);
 	}
 
 	return IRQ_HANDLED;
@@ -654,15 +386,15 @@ static irqreturn_t cdns_pcie_irq_handler(int irq, void *arg)
 static void cdns_chained_msi_isr(struct irq_desc *desc)
 {
 	struct irq_chip *chip = irq_desc_get_chip(desc);
-	struct cdns_mango_pcie_rc *rc;
+	struct sg2042_pcie *pcie;
 	u32 status = 0;
 	u32 st_msi_in_bit = 0;
 	u32 clr_msi_in_bit = 0;
 
 	chained_irq_enter(chip, desc);
 
-	rc = irq_desc_get_handler_data(desc);
-	if (rc->link_id == 1) {
+	pcie = irq_desc_get_handler_data(desc);
+	if (pcie->link_id == 1) {
 		st_msi_in_bit = CDNS_PCIE_IRS_REG0810_ST_LINK1_MSI_IN_BIT;
 		clr_msi_in_bit = CDNS_PCIE_IRS_REG0804_CLR_LINK1_MSI_IN_BIT;
 	} else {
@@ -670,19 +402,19 @@ static void cdns_chained_msi_isr(struct irq_desc *desc)
 		clr_msi_in_bit = CDNS_PCIE_IRS_REG0804_CLR_LINK0_MSI_IN_BIT;
 	}
 
-	regmap_read(rc->syscon, CDNS_PCIE_IRS_REG0810, &status);
+	regmap_read(pcie->syscon, CDNS_PCIE_IRS_REG0810, &status);
 	if ((status >> st_msi_in_bit) & 0x1) {
 		WARN_ON(!IS_ENABLED(CONFIG_PCI_MSI));
 
 		//clear msi interrupt bit reg0810[2]
-		regmap_read(rc->syscon, CDNS_PCIE_IRS_REG0804, &status);
+		regmap_read(pcie->syscon, CDNS_PCIE_IRS_REG0804, &status);
 		status |= ((u32)0x1 << clr_msi_in_bit);
-		regmap_write(rc->syscon, CDNS_PCIE_IRS_REG0804, status);
+		regmap_write(pcie->syscon, CDNS_PCIE_IRS_REG0804, status);
 
 		status &= ~((u32)0x1 << clr_msi_in_bit);
-		regmap_write(rc->syscon, CDNS_PCIE_IRS_REG0804, status);
+		regmap_write(pcie->syscon, CDNS_PCIE_IRS_REG0804, status);
 
-		cdns_handle_msi_irq(rc);
+		cdns_handle_msi_irq(pcie);
 	}
 
 	chained_irq_exit(chip, desc);
@@ -704,17 +436,17 @@ static void cdns_pci_bottom_unmask(struct irq_data *d)
 
 static void cdns_pci_setup_msi_msg(struct irq_data *d, struct msi_msg *msg)
 {
-	struct cdns_mango_pcie_rc *rc = irq_data_get_irq_chip_data(d);
-	struct device *dev = rc->pcie.dev;
+	struct sg2042_pcie *pcie = irq_data_get_irq_chip_data(d);
+	struct device *dev = pcie->cdns_pcie->dev;
 	u64 msi_target;
 
-	msi_target = (u64)rc->msi_data;
+	msi_target = (u64)pcie->msi_data;
 
 	msg->address_lo = lower_32_bits(msi_target) + BYTE_NUM_PER_MSI_VEC * d->hwirq;
 	msg->address_hi = upper_32_bits(msi_target);
 	msg->data = 1;
 
-	rc->num_applied_vecs = d->hwirq;
+	pcie->num_applied_vecs = d->hwirq;
 
 	dev_err(dev, "msi#%d address_hi %#x address_lo %#x\n",
 		(int)d->hwirq, msg->address_hi, msg->address_lo);
@@ -737,25 +469,25 @@ static int cdns_pcie_irq_domain_alloc(struct irq_domain *domain,
 				    unsigned int virq, unsigned int nr_irqs,
 				    void *args)
 {
-	struct cdns_mango_pcie_rc *rc = domain->host_data;
+	struct sg2042_pcie *pcie = domain->host_data;
 	unsigned long flags;
 	u32 i;
 	int bit;
 
-	raw_spin_lock_irqsave(&rc->lock, flags);
+	raw_spin_lock_irqsave(&pcie->lock, flags);
 
-	bit = bitmap_find_free_region(rc->msi_irq_in_use, rc->num_vectors,
+	bit = bitmap_find_free_region(pcie->msi_irq_in_use, pcie->num_vectors,
 				      order_base_2(nr_irqs));
 
-	raw_spin_unlock_irqrestore(&rc->lock, flags);
+	raw_spin_unlock_irqrestore(&pcie->lock, flags);
 
 	if (bit < 0)
 		return -ENOSPC;
 
 	for (i = 0; i < nr_irqs; i++)
 		irq_domain_set_info(domain, virq + i, bit + i,
-				    rc->msi_irq_chip,
-				    rc, handle_edge_irq,
+				    pcie->msi_irq_chip,
+				    pcie, handle_edge_irq,
 				    NULL, NULL);
 
 	return 0;
@@ -765,15 +497,15 @@ static void cdns_pcie_irq_domain_free(struct irq_domain *domain,
 				    unsigned int virq, unsigned int nr_irqs)
 {
 	struct irq_data *d = irq_domain_get_irq_data(domain, virq);
-	struct cdns_mango_pcie_rc *rc = irq_data_get_irq_chip_data(d);
+	struct sg2042_pcie *pcie = irq_data_get_irq_chip_data(d);
 	unsigned long flags;
 
-	raw_spin_lock_irqsave(&rc->lock, flags);
+	raw_spin_lock_irqsave(&pcie->lock, flags);
 
-	bitmap_release_region(rc->msi_irq_in_use, d->hwirq,
+	bitmap_release_region(pcie->msi_irq_in_use, d->hwirq,
 			      order_base_2(nr_irqs));
 
-	raw_spin_unlock_irqrestore(&rc->lock, flags);
+	raw_spin_unlock_irqrestore(&pcie->lock, flags);
 }
 
 static const struct irq_domain_ops cdns_pcie_msi_domain_ops = {
@@ -781,64 +513,64 @@ static const struct irq_domain_ops cdns_pcie_msi_domain_ops = {
 	.free	= cdns_pcie_irq_domain_free,
 };
 
-static int cdns_pcie_allocate_domains(struct cdns_mango_pcie_rc *rc)
+static int cdns_pcie_allocate_domains(struct sg2042_pcie *pcie)
 {
-	struct device *dev = rc->pcie.dev;
+	struct device *dev = pcie->cdns_pcie->dev;
 	struct fwnode_handle *fwnode = of_node_to_fwnode(dev->of_node);
 
-	rc->irq_domain = irq_domain_create_linear(fwnode, rc->num_vectors,
-					       &cdns_pcie_msi_domain_ops, rc);
-	if (!rc->irq_domain) {
+	pcie->irq_domain = irq_domain_create_linear(fwnode, pcie->num_vectors,
+					       &cdns_pcie_msi_domain_ops, pcie);
+	if (!pcie->irq_domain) {
 		dev_err(dev, "Failed to create IRQ domain\n");
 		return -ENOMEM;
 	}
 
-	irq_domain_update_bus_token(rc->irq_domain, DOMAIN_BUS_NEXUS);
+	irq_domain_update_bus_token(pcie->irq_domain, DOMAIN_BUS_NEXUS);
 
-	rc->msi_domain = pci_msi_create_irq_domain(fwnode,
+	pcie->msi_domain = pci_msi_create_irq_domain(fwnode,
 						   &cdns_pcie_msi_domain_info,
-						   rc->irq_domain);
-	if (!rc->msi_domain) {
+						   pcie->irq_domain);
+	if (!pcie->msi_domain) {
 		dev_err(dev, "Failed to create MSI domain\n");
-		irq_domain_remove(rc->irq_domain);
+		irq_domain_remove(pcie->irq_domain);
 		return -ENOMEM;
 	}
 
 	return 0;
 }
 
-static void cdns_pcie_free_msi(struct cdns_mango_pcie_rc *rc)
+static void cdns_pcie_free_msi(struct sg2042_pcie *pcie)
 {
-	struct device *dev = rc->pcie.dev;
+	struct device *dev = pcie->cdns_pcie->dev;
 
-	if (rc->msi_irq) {
-		irq_set_chained_handler(rc->msi_irq, NULL);
-		irq_set_handler_data(rc->msi_irq, NULL);
+	if (pcie->msi_irq) {
+		irq_set_chained_handler(pcie->msi_irq, NULL);
+		irq_set_handler_data(pcie->msi_irq, NULL);
 	}
 
-	irq_domain_remove(rc->msi_domain);
-	irq_domain_remove(rc->irq_domain);
+	irq_domain_remove(pcie->msi_domain);
+	irq_domain_remove(pcie->irq_domain);
 
-	if (rc->msi_page)
-		dma_free_coherent(dev, 1024, rc->msi_page, rc->msi_data);
+	if (pcie->msi_page)
+		dma_free_coherent(dev, 1024, pcie->msi_page, pcie->msi_data);
 
 }
 
-static int cdns_pcie_msi_setup(struct cdns_mango_pcie_rc *rc)
+static int cdns_pcie_msi_setup(struct sg2042_pcie *pcie)
 {
 	int ret = 0;
 
-	raw_spin_lock_init(&rc->lock);
+	raw_spin_lock_init(&pcie->lock);
 
 	if (IS_ENABLED(CONFIG_PCI_MSI)) {
-		rc->msi_irq_chip = &cdns_pci_msi_bottom_irq_chip;
+		pcie->msi_irq_chip = &cdns_pci_msi_bottom_irq_chip;
 
-		ret = cdns_pcie_allocate_domains(rc);
+		ret = cdns_pcie_allocate_domains(pcie);
 		if (ret)
 			return ret;
 
-		if (rc->msi_irq)
-			irq_set_chained_handler_and_data(rc->msi_irq, cdns_chained_msi_isr, rc);
+		if (pcie->msi_irq)
+			irq_set_chained_handler_and_data(pcie->msi_irq, cdns_chained_msi_isr, pcie);
 	}
 
 	return ret;
@@ -851,20 +583,29 @@ static int cdns_pcie_irq_parse_and_map_pci(const struct pci_dev *dev, u8 slot, u
 // mango 私有逻辑，需要保留
 //////////////////////////////////////////////////////////////////
 
-static int cdns_pcie_host_probe(struct platform_device *pdev)
+static int sg2042_pcie_host_probe(struct platform_device *pdev)
 {
 	struct device *dev = &pdev->dev;
 	struct device_node *np = dev->of_node;
 	struct device_node *np_top;
 	struct pci_host_bridge *bridge;
-	struct cdns_mango_pcie_rc *rc;
-	struct cdns_pcie *pcie;
-	struct resource *res;
+
+	struct cdns_pcie *cdns_pcie;
+	struct sg2042_pcie *pcie;
+
+	struct cdns_pcie_rc *rc = NULL;
+
 	int ret;
-	int phy_count;
 	int top_intc_id = -1;
 
 	struct regmap *syscon;
+
+	pcie = devm_kzalloc(dev, sizeof(*pcie), GFP_KERNEL);
+	if (!pcie)
+		return -ENOMEM;
+
+	if (!IS_ENABLED(CONFIG_PCIE_CADENCE_HOST))
+		return -ENODEV;
 
 	bridge = devm_pci_alloc_host_bridge(dev, sizeof(*rc));
 	if (!bridge)
@@ -872,10 +613,10 @@ static int cdns_pcie_host_probe(struct platform_device *pdev)
 
 	rc = pci_host_bridge_priv(bridge);
 
-	pcie = &rc->pcie;
-	pcie->dev = dev;
-	pcie->is_rc = true;
-	pcie->ops = &cdns_mango_ops;
+	cdns_pcie = &rc->pcie;
+	cdns_pcie->dev = dev;
+	cdns_pcie->ops = &cdns_mango_ops;
+	pcie->cdns_pcie = cdns_pcie;
 
 	np_top = of_parse_phandle(np, "pcie-syscon", 0);
 	if (!np_top) {
@@ -887,51 +628,22 @@ static int cdns_pcie_host_probe(struct platform_device *pdev)
 		dev_err(dev, "cannot get regmap\n");
 		return -ENOMEM;
 	}
-	rc->syscon = syscon;
+	pcie->syscon = syscon;
 
-	rc->no_bar_nbits = 32;
-	of_property_read_u32(np, "cdns,no-bar-match-nbits", &rc->no_bar_nbits);
+	pcie->pcie_id = 0xffff;
+	of_property_read_u16(np, "pcie-id", &pcie->pcie_id);
 
-	rc->vendor_id = 0xffff;
-	of_property_read_u16(np, "vendor-id", &rc->vendor_id);
+	pcie->link_id = 0xffff;
+	of_property_read_u16(np, "link-id", &pcie->link_id);
 
-	rc->device_id = 0xffff;
-	of_property_read_u16(np, "device-id", &rc->device_id);
+	pcie->msix_supported = 0;
+	of_property_read_u32(np, "msix-supported", &pcie->msix_supported);
 
-	rc->pcie_id = 0xffff;
-	of_property_read_u16(np, "pcie-id", &rc->pcie_id);
-
-	rc->link_id = 0xffff;
-	of_property_read_u16(np, "link-id", &rc->link_id);
-
-	rc->msix_supported = 0;
-	of_property_read_u32(np, "msix-supported", &rc->msix_supported);
-
-	rc->top_intc_used = 0;
-	of_property_read_u32(np, "top-intc-used", &rc->top_intc_used);
-	if (rc->top_intc_used == 1)
+	pcie->top_intc_used = 0;
+	of_property_read_u32(np, "top-intc-used", &pcie->top_intc_used);
+	if (pcie->top_intc_used == 1)
 		of_property_read_u32(np, "top-intc-id", &top_intc_id);
 
-	res = platform_get_resource_byname(pdev, IORESOURCE_MEM, "reg");
-	pcie->reg_base = devm_ioremap_resource(dev, res);
-	if (IS_ERR(pcie->reg_base)) {
-		dev_err(dev, "missing \"reg\"\n");
-		return PTR_ERR(pcie->reg_base);
-	}
-
-	res = platform_get_resource_byname(pdev, IORESOURCE_MEM, "cfg");
-	rc->cfg_base = devm_pci_remap_cfg_resource(dev, res);
-	if (IS_ERR(rc->cfg_base)) {
-		dev_err(dev, "missing \"cfg\"\n");
-		return PTR_ERR(rc->cfg_base);
-	}
-	rc->cfg_res = res;
-
-	ret = cdns_pcie_init_phy(dev, pcie);
-	if (ret) {
-		dev_err(dev, "failed to init phy\n");
-		return ret;
-	}
 	platform_set_drvdata(pdev, pcie);
 
 	pm_runtime_enable(dev);
@@ -941,20 +653,31 @@ static int cdns_pcie_host_probe(struct platform_device *pdev)
 		goto err_get_sync;
 	}
 
-	ret = cdns_pcie_host_init(dev, rc);
-	if (ret)
-		goto err_init;
+	// do sg2042 related initialization work
+	// FIXME: 下面这段逻辑是从原来的 cdns_pcie_host_init 里挪出来的
+	// 但是感觉也可以和下面一段逻辑合并，都是处理 not use top-intc 的情况
+	if (pcie->top_intc_used == 0) {
+		pcie->num_vectors = MSI_DEF_NUM_VECTORS;
+		pcie->num_applied_vecs = 0;
+		if (IS_ENABLED(CONFIG_PCI_MSI)) {
+			ret = cdns_pcie_msi_init(pcie);
+			if (ret) {
+				dev_err(dev, "cdns_pcie_msi_init() failed\n");
+				goto err_get_sync;
+			}
+		}
+	}
 
-	if ((rc->top_intc_used == 0) && (IS_ENABLED(CONFIG_PCI_MSI))) {
-		rc->msi_irq = platform_get_irq_byname(pdev, "msi");
-		if (rc->msi_irq <= 0) {
+	if ((pcie->top_intc_used == 0) && (IS_ENABLED(CONFIG_PCI_MSI))) {
+		pcie->msi_irq = platform_get_irq_byname(pdev, "msi");
+		if (pcie->msi_irq <= 0) {
 			dev_err(dev, "failed to get MSI irq\n");
 			goto err_init_irq;
 		}
 
-		ret = devm_request_irq(dev, rc->msi_irq, cdns_pcie_irq_handler,
+		ret = devm_request_irq(dev, pcie->msi_irq, cdns_pcie_irq_handler,
 				       IRQF_SHARED | IRQF_NO_THREAD,
-				       "cdns-pcie-irq", rc);
+				       "cdns-pcie-irq", pcie);
 
 		if (ret) {
 			dev_err(dev, "failed to request MSI irq\n");
@@ -962,62 +685,64 @@ static int cdns_pcie_host_probe(struct platform_device *pdev)
 		}
 	}
 
-	bridge->dev.parent = dev;
+	bridge->dev.parent = dev; // FIXME: 这个设置有何用？
 	bridge->ops = &cdns_pcie_host_ops;
-	if (rc->top_intc_used == 1)
+	// FIXME: 这个设置有何用？
+	if (pcie->top_intc_used == 1)
 		bridge->map_irq = of_irq_parse_and_map_pci;
 	else
 		bridge->map_irq = cdns_pcie_irq_parse_and_map_pci;
-	bridge->swizzle_irq = pci_common_swizzle;
-	if (rc->top_intc_used == 0)
-		bridge->sysdata = rc;
+	bridge->swizzle_irq = pci_common_swizzle; // FIXME: 这个设置有何用？
+	if (pcie->top_intc_used == 0)
+		bridge->sysdata = pcie; // FIXME: 这个设置有何用？
 
-	if (rc->top_intc_used == 0) {
-		ret = cdns_pcie_msi_setup(rc);
+	if (pcie->top_intc_used == 0) {
+		ret = cdns_pcie_msi_setup(pcie);
 		if (ret < 0)
 			goto err_host_probe;
-	} else if (rc->top_intc_used == 1) {
-		ret = cdns_pcie_msi_setup_for_top_intc(rc, top_intc_id);
+	} else if (pcie->top_intc_used == 1) {
+		ret = cdns_pcie_msi_setup_for_top_intc(pcie, top_intc_id);
 		if (ret < 0)
 			goto err_host_probe;
 	}
 
-	ret = pci_host_probe(bridge);
-	if (ret < 0)
-		goto err_host_probe;
+	ret = cdns_pcie_init_phy(dev, cdns_pcie);
+	if (ret) {
+		dev_err(dev, "Failed to init phy\n");
+		goto err_get_sync;
+	}
+	
+	ret = cdns_pcie_host_setup(rc);
+	if (ret < 0) {
+		goto err_pcie_setup;
+	}
 
 	return 0;
 
  err_host_probe:
  err_init_irq:
-	if ((rc->top_intc_used == 0) && pci_msi_enabled())
-		cdns_pcie_free_msi(rc);
+	if ((pcie->top_intc_used == 0) && pci_msi_enabled())
+		cdns_pcie_free_msi(pcie);
 
- err_init:
-	pm_runtime_put_sync(dev);
+ err_pcie_setup:
+	cdns_pcie_disable_phy(cdns_pcie);
 
- err_get_sync:
+err_get_sync:
+	pm_runtime_put(dev);
 	pm_runtime_disable(dev);
-	cdns_pcie_disable_phy(pcie);
-	phy_count = pcie->phy_count;
-	while (phy_count--)
-		device_link_del(pcie->link[phy_count]);
 
 	return ret;
 }
 
 static void cdns_pcie_shutdown(struct platform_device *pdev)
 {
+	struct sg2042_pcie *pcie = platform_get_drvdata(pdev);
+	struct cdns_pcie *cdns_pcie = pcie->cdns_pcie;
 	struct device *dev = &pdev->dev;
-	struct cdns_pcie *pcie = dev_get_drvdata(dev);
-	int ret;
 
-	ret = pm_runtime_put_sync(dev);
-	if (ret < 0)
-		dev_dbg(dev, "pm_runtime_put_sync failed\n");
-
+	cdns_pcie_disable_phy(cdns_pcie);
+	pm_runtime_put(dev);
 	pm_runtime_disable(dev);
-	cdns_pcie_disable_phy(pcie);
 }
 
 static struct platform_driver cdns_pcie_host_driver = {
@@ -1026,7 +751,7 @@ static struct platform_driver cdns_pcie_host_driver = {
 		.of_match_table = cdns_pcie_host_of_match,
 		.pm	= &cdns_pcie_pm_ops,
 	},
-	.probe = cdns_pcie_host_probe,
+	.probe = sg2042_pcie_host_probe,
 	.shutdown = cdns_pcie_shutdown,
 };
 builtin_platform_driver(cdns_pcie_host_driver);
