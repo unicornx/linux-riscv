@@ -60,22 +60,34 @@ static inline u32 cdns_pcie_rp_readl(struct cdns_pcie *pcie,
  * @dev: pointer to PCIe device
  * @cfg_res: start/end offsets in the physical system memory to map PCI
  *           configuration space accesses
- * @bus_range: first/last buses behind the PCIe host controller
  * @cfg_base: IO mapped window to access the PCI configuration space of a
  *            single function at a time
- * @max_regions: maximum number of regions supported by the hardware
  * @no_bar_nbits: Number of bits to keep for inbound (PCIe -> CPU) address
  *                translation (nbits sets into the "no BAR match" register)
  * @vendor_id: PCI vendor ID
  * @device_id: PCI device ID
+ * @pcie_id:
+ * @link_id:
+ * @top_intc_used:
+ * @msix_supported:
+ * @msi_domain:
+ * @msi_irq:
+ * @irq_domain:
+ * @msi_data:
+ * @msi_page:
+ * @msi_irq_chip:
+ * @num_vectors:
+ * @num_applied_vecs:
+ * @irq_mask:
+ * @lock:
+ * @msi_irq_in_use:
+ * @syscon:
  */
 struct cdns_mango_pcie_rc {
 	struct cdns_pcie	pcie;
 	struct device		*dev;
 	struct resource		*cfg_res;
-	struct resource		*bus_range;
 	void __iomem		*cfg_base;
-	u32			max_regions;
 	u32			no_bar_nbits;
 	u16			vendor_id;
 	u16			device_id;
@@ -92,7 +104,6 @@ struct cdns_mango_pcie_rc {
 	u32			num_vectors;
 	u32			num_applied_vecs;
 	u32			irq_mask[MAX_MSI_CTRLS];
-	struct pci_bus		*root_bus;
 	raw_spinlock_t		lock;
 	DECLARE_BITMAP(msi_irq_in_use, MAX_MSI_IRQS);
 	struct regmap		*syscon;
@@ -155,7 +166,7 @@ static void __iomem *cdns_mango_pci_map_bus(struct pci_bus *bus, unsigned int de
 	return rc->cfg_base + (where & 0xfff);
 }
 
-int cdns_pcie_config_read(struct pci_bus *bus, unsigned int devfn,
+static int cdns_pcie_config_read(struct pci_bus *bus, unsigned int devfn,
 			    int where, int size, u32 *val)
 {
 	unsigned long addr;
@@ -191,7 +202,7 @@ int cdns_pcie_config_read(struct pci_bus *bus, unsigned int devfn,
 	return PCIBIOS_SUCCESSFUL;
 }
 
-int cdns_pcie_config_write(struct pci_bus *bus, unsigned int devfn,
+static int cdns_pcie_config_write(struct pci_bus *bus, unsigned int devfn,
 			     int where, int size, u32 val)
 {
 	unsigned long addr;
@@ -353,7 +364,6 @@ static int cdns_pcie_host_init_address_translation(struct cdns_mango_pcie_rc *rc
 static int cdns_pcie_msi_init(struct cdns_mango_pcie_rc *rc)
 {
 	struct device *dev = rc->dev;
-	struct cdns_pcie *pcie = &rc->pcie;
 	u64 msi_target = 0;
 	u32 value = 0;
 
@@ -512,7 +522,7 @@ static int cdns_pcie_msi_setup_for_top_intc(struct cdns_mango_pcie_rc *rc, int i
 }
 
 /* MSI int handler */
-irqreturn_t cdns_handle_msi_irq(struct cdns_mango_pcie_rc *rc)
+static irqreturn_t cdns_handle_msi_irq(struct cdns_mango_pcie_rc *rc)
 {
 	u32 i, pos, irq;
 	unsigned long val;
@@ -558,7 +568,6 @@ irqreturn_t cdns_handle_msi_irq(struct cdns_mango_pcie_rc *rc)
 static irqreturn_t cdns_pcie_irq_handler(int irq, void *arg)
 {
 	struct cdns_mango_pcie_rc *rc = arg;
-	struct cdns_pcie *pcie = &rc->pcie;
 	u32 status = 0;
 	u32 st_msi_in_bit = 0;
 	u32 clr_msi_in_bit = 0;
@@ -594,7 +603,6 @@ static void cdns_chained_msi_isr(struct irq_desc *desc)
 {
 	struct irq_chip *chip = irq_desc_get_chip(desc);
 	struct cdns_mango_pcie_rc *rc;
-	struct cdns_pcie *pcie;
 	u32 status = 0;
 	u32 st_msi_in_bit = 0;
 	u32 clr_msi_in_bit = 0;
@@ -602,7 +610,6 @@ static void cdns_chained_msi_isr(struct irq_desc *desc)
 	chained_irq_enter(chip, desc);
 
 	rc = irq_desc_get_handler_data(desc);
-	pcie = &rc->pcie;
 	if (rc->link_id == 1) {
 		st_msi_in_bit = CDNS_PCIE_IRS_REG0810_ST_LINK1_MSI_IN_BIT;
 		clr_msi_in_bit = CDNS_PCIE_IRS_REG0804_CLR_LINK1_MSI_IN_BIT;
@@ -721,7 +728,7 @@ static const struct irq_domain_ops cdns_pcie_msi_domain_ops = {
 	.free	= cdns_pcie_irq_domain_free,
 };
 
-int cdns_pcie_allocate_domains(struct cdns_mango_pcie_rc *rc)
+static int cdns_pcie_allocate_domains(struct cdns_mango_pcie_rc *rc)
 {
 	struct fwnode_handle *fwnode = of_node_to_fwnode(rc->dev->of_node);
 
@@ -746,7 +753,7 @@ int cdns_pcie_allocate_domains(struct cdns_mango_pcie_rc *rc)
 	return 0;
 }
 
-void cdns_pcie_free_msi(struct cdns_mango_pcie_rc *rc)
+static void cdns_pcie_free_msi(struct cdns_mango_pcie_rc *rc)
 {
 	if (rc->msi_irq) {
 		irq_set_chained_handler(rc->msi_irq, NULL);
@@ -823,9 +830,6 @@ static int cdns_pcie_host_probe(struct platform_device *pdev)
 		return -ENOMEM;
 	}
 	rc->syscon = syscon;
-
-	rc->max_regions = 32;
-	of_property_read_u32(np, "cdns,max-outbound-regions", &rc->max_regions);
 
 	rc->no_bar_nbits = 32;
 	of_property_read_u32(np, "cdns,no-bar-match-nbits", &rc->no_bar_nbits);
