@@ -57,7 +57,6 @@ static inline u32 cdns_pcie_rp_readl(struct cdns_pcie *pcie,
 /**
  * struct cdns_mango_pcie_rc - private data for this PCIe Root Complex driver
  * @pcie: Cadence PCIe controller
- * @dev: pointer to PCIe device
  * @cfg_res: start/end offsets in the physical system memory to map PCI
  *           configuration space accesses
  * @cfg_base: IO mapped window to access the PCI configuration space of a
@@ -84,13 +83,19 @@ static inline u32 cdns_pcie_rp_readl(struct cdns_pcie *pcie,
  * @syscon:
  */
 struct cdns_mango_pcie_rc {
+	// members from struct cdns_pcie_rc
 	struct cdns_pcie	pcie;
-	struct device		*dev;
 	struct resource		*cfg_res;
 	void __iomem		*cfg_base;
-	u32			no_bar_nbits;
 	u16			vendor_id;
 	u16			device_id;
+
+	// in pcie-cadence-host.c, this member is not needed
+	// "cdns,no-bar-match-nbits" will be fetched when it is used
+	// see cdns_pcie_host_map_dma_ranges()
+	u32			no_bar_nbits;
+
+	// Fully private members for sg2042
 	u16			pcie_id;
 	u16			link_id;
 	u32			top_intc_used;
@@ -363,7 +368,7 @@ static int cdns_pcie_host_init_address_translation(struct cdns_mango_pcie_rc *rc
 
 static int cdns_pcie_msi_init(struct cdns_mango_pcie_rc *rc)
 {
-	struct device *dev = rc->dev;
+	struct device *dev = rc->pcie.dev;
 	u64 msi_target = 0;
 	u32 value = 0;
 
@@ -501,7 +506,8 @@ int check_vendor_id(struct pci_dev *dev, struct vendor_id_list vendor_id_list[],
 static int cdns_pcie_msi_setup_for_top_intc(struct cdns_mango_pcie_rc *rc, int intc_id)
 {
 	struct irq_domain *irq_parent = cdns_pcie_get_parent_irq_domain(intc_id);
-	struct fwnode_handle *fwnode = of_node_to_fwnode(rc->dev->of_node);
+	struct device *dev = rc->pcie.dev;
+	struct fwnode_handle *fwnode = of_node_to_fwnode(dev->of_node);
 
 	if (rc->msix_supported == 1) {
 		rc->msi_domain = pci_msi_create_irq_domain(fwnode,
@@ -514,7 +520,7 @@ static int cdns_pcie_msi_setup_for_top_intc(struct cdns_mango_pcie_rc *rc, int i
 	}
 
 	if (!rc->msi_domain) {
-		dev_err(rc->dev, "create msi irq domain failed\n");
+		dev_err(dev, "create msi irq domain failed\n");
 		return -ENODEV;
 	}
 
@@ -653,6 +659,7 @@ static void cdns_pci_bottom_unmask(struct irq_data *d)
 static void cdns_pci_setup_msi_msg(struct irq_data *d, struct msi_msg *msg)
 {
 	struct cdns_mango_pcie_rc *rc = irq_data_get_irq_chip_data(d);
+	struct device *dev = rc->pcie.dev;
 	u64 msi_target;
 
 	msi_target = (u64)rc->msi_data;
@@ -663,7 +670,7 @@ static void cdns_pci_setup_msi_msg(struct irq_data *d, struct msi_msg *msg)
 
 	rc->num_applied_vecs = d->hwirq;
 
-	dev_err(rc->dev, "msi#%d address_hi %#x address_lo %#x\n",
+	dev_err(dev, "msi#%d address_hi %#x address_lo %#x\n",
 		(int)d->hwirq, msg->address_hi, msg->address_lo);
 }
 
@@ -730,12 +737,13 @@ static const struct irq_domain_ops cdns_pcie_msi_domain_ops = {
 
 static int cdns_pcie_allocate_domains(struct cdns_mango_pcie_rc *rc)
 {
-	struct fwnode_handle *fwnode = of_node_to_fwnode(rc->dev->of_node);
+	struct device *dev = rc->pcie.dev;
+	struct fwnode_handle *fwnode = of_node_to_fwnode(dev->of_node);
 
 	rc->irq_domain = irq_domain_create_linear(fwnode, rc->num_vectors,
 					       &cdns_pcie_msi_domain_ops, rc);
 	if (!rc->irq_domain) {
-		dev_err(rc->dev, "Failed to create IRQ domain\n");
+		dev_err(dev, "Failed to create IRQ domain\n");
 		return -ENOMEM;
 	}
 
@@ -745,7 +753,7 @@ static int cdns_pcie_allocate_domains(struct cdns_mango_pcie_rc *rc)
 						   &cdns_pcie_msi_domain_info,
 						   rc->irq_domain);
 	if (!rc->msi_domain) {
-		dev_err(rc->dev, "Failed to create MSI domain\n");
+		dev_err(dev, "Failed to create MSI domain\n");
 		irq_domain_remove(rc->irq_domain);
 		return -ENOMEM;
 	}
@@ -755,6 +763,8 @@ static int cdns_pcie_allocate_domains(struct cdns_mango_pcie_rc *rc)
 
 static void cdns_pcie_free_msi(struct cdns_mango_pcie_rc *rc)
 {
+	struct device *dev = rc->pcie.dev;
+
 	if (rc->msi_irq) {
 		irq_set_chained_handler(rc->msi_irq, NULL);
 		irq_set_handler_data(rc->msi_irq, NULL);
@@ -764,7 +774,7 @@ static void cdns_pcie_free_msi(struct cdns_mango_pcie_rc *rc)
 	irq_domain_remove(rc->irq_domain);
 
 	if (rc->msi_page)
-		dma_free_coherent(rc->dev, 1024, rc->msi_page, rc->msi_data);
+		dma_free_coherent(dev, 1024, rc->msi_page, rc->msi_data);
 
 }
 
@@ -813,9 +823,9 @@ static int cdns_pcie_host_probe(struct platform_device *pdev)
 		return -ENOMEM;
 
 	rc = pci_host_bridge_priv(bridge);
-	rc->dev = dev;
 
 	pcie = &rc->pcie;
+	pcie->dev = dev;
 	pcie->is_rc = true;
 	pcie->ops = &cdns_mango_ops;
 
