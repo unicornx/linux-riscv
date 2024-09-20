@@ -123,6 +123,15 @@ static const struct cdns_pcie_ops cdns_mango_ops = {
 	.cpu_addr_fixup = cdns_mango_cpu_addr_fixup,
 };
 
+// 这个函数和 pcie-cadence-host.c 中的 cdns_pci_map_bus 几乎完全一样，除了将
+// cdns_pcie_rc 替换成 cdns_mango_pcie_rc
+// 参考 drivers/pci/controller/cadence/pci-j721e.c
+// static struct pci_ops cdns_ti_pcie_host_ops = {
+//	.map_bus	= cdns_pci_map_bus,
+//	...
+// };
+// 所以 cdns_pcie_host_ops 中的 .map_bus 可以直接用 cdns_pci_map_bus 替换
+// 这个函数可以删掉
 static void __iomem *cdns_mango_pci_map_bus(struct pci_bus *bus, unsigned int devfn,
 					    int where)
 {
@@ -171,6 +180,9 @@ static void __iomem *cdns_mango_pci_map_bus(struct pci_bus *bus, unsigned int de
 	return rc->cfg_base + (where & 0xfff);
 }
 
+// cdns_pcie_config_read 和 cdns_pcie_config_write
+// 我测试了一下，竟然可以直接用 drivers/pci/controller/cadence/pci-j721e.c
+// 中的 cdns_ti_pcie_config_read/cdns_ti_pcie_config_write 完美替换
 static int cdns_pcie_config_read(struct pci_bus *bus, unsigned int devfn,
 			    int where, int size, u32 *val)
 {
@@ -258,6 +270,16 @@ static const struct of_device_id cdns_pcie_host_of_match[] = {
 	{ },
 };
 
+// 和 drivers/pci/controller/cadence/pcie-cadence-host.c 中的
+// cdns_pcie_host_init_root_port 函数几乎一样，感觉可以替换掉
+// cadence host 中函数调用关系如下
+// cdns_pcie_host_setup
+// -> cdns_pcie_host_init
+//    -> cdns_pcie_host_init_root_port
+// mango 的函数调用关系如下：
+// cdns_pcie_host_probe
+// -> cdns_pcie_host_init
+//    -> cdns_pcie_host_init_root_port
 static int cdns_pcie_host_init_root_port(struct cdns_mango_pcie_rc *rc)
 {
 	struct cdns_pcie *pcie = &rc->pcie;
@@ -300,6 +322,21 @@ static int cdns_pcie_host_init_root_port(struct cdns_mango_pcie_rc *rc)
 	return 0;
 }
 
+// 和 drivers/pci/controller/cadence/pcie-cadence-host.c 中的
+// cdns_pcie_host_init_root_port 函数几乎一样，感觉可以替换掉
+// 唯一的区别是 cadence-host 中该函数最后调用 cdns_pcie_host_map_dma_ranges()
+// 而本函数这里执行了一段自己的逻辑，但经过分析发现这么写有可能是为了避免照抄
+// cadence-host 引入更多的函数，加了 log 后发现实际效果和在 cadence-host 中
+// 执行的路径 cdns_pcie_host_map_dma_ranges -> cdns_pcie_host_bar_ib_config
+// -> bar == RP_NO_BAR return 0 的效果是一样的。
+// cadence host 中函数调用关系如下
+// cdns_pcie_host_setup
+// -> cdns_pcie_host_init
+//    -> cdns_pcie_host_init_address_translation
+// mango 的函数调用关系如下：
+// cdns_pcie_host_probe
+// -> cdns_pcie_host_init
+//    -> cdns_pcie_host_init_address_translation
 static int cdns_pcie_host_init_address_translation(struct cdns_mango_pcie_rc *rc)
 {
 	struct cdns_pcie *pcie = &rc->pcie;
@@ -366,6 +403,7 @@ static int cdns_pcie_host_init_address_translation(struct cdns_mango_pcie_rc *rc
 	return 0;
 }
 
+// 这是 mango 自己定义的函数，会保留
 static int cdns_pcie_msi_init(struct cdns_mango_pcie_rc *rc)
 {
 	struct device *dev = rc->pcie.dev;
@@ -406,6 +444,9 @@ static int cdns_pcie_msi_init(struct cdns_mango_pcie_rc *rc)
 	return 0;
 }
 
+// 这个函数和 cadence-host 中的 cdns_pcie_host_init 很像
+// 唯一的区别是后面有一段 mango 自己的初始化逻辑
+// 如果要改造，得想办法把这一段逻辑移到 cdns_pcie_host_setup 调用之外？FIXME
 static int cdns_pcie_host_init(struct device *dev, struct cdns_mango_pcie_rc *rc)
 {
 	int err;
@@ -431,6 +472,8 @@ static int cdns_pcie_host_init(struct device *dev, struct cdns_mango_pcie_rc *rc
 }
 
 
+//////////////////////////////////////////////////////////////////
+// mango 私有逻辑，需要保留
 static void cdns_pcie_msi_ack_irq(struct irq_data *d)
 {
 	irq_chip_ack_parent(d);
@@ -466,6 +509,9 @@ static struct msi_domain_info cdns_pcie_top_intr_msi_domain_info = {
 	.chip	= &cdns_pcie_msi_irq_chip,
 };
 
+// FIXME：有关 check_vendor_id 我发现 a42bea5b2840bf1e33aafa4158d26c064227dfe8
+// 这个 commit 里 sophgo 塞了一些东西在内核里（除了驱动和 dts 之外的部分），
+// 这些东西好 upstream 吗？感觉需要拿出来讨论一下
 struct vendor_id_list vendor_id_list[] = {
 	{"Inter X520", 0x8086, 0x10fb},
 	{"Inter I40E", 0x8086, 0x1572},
@@ -802,6 +848,8 @@ static int cdns_pcie_irq_parse_and_map_pci(const struct pci_dev *dev, u8 slot, u
 {
 	return 0; /* Proper return code 0 == NO_IRQ */
 }
+// mango 私有逻辑，需要保留
+//////////////////////////////////////////////////////////////////
 
 static int cdns_pcie_host_probe(struct platform_device *pdev)
 {
