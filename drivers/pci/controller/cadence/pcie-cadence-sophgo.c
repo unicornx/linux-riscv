@@ -73,88 +73,30 @@ static const struct cdns_pcie_ops cdns_mango_ops = {
 	.cpu_addr_fixup = cdns_mango_cpu_addr_fixup,
 };
 
-// cdns_pcie_config_read 和 cdns_pcie_config_write
-// 我测试了一下，竟然可以直接用 drivers/pci/controller/cadence/pci-j721e.c
-// 中的 cdns_ti_pcie_config_read/cdns_ti_pcie_config_write 完美替换
-static int cdns_pcie_config_read(struct pci_bus *bus, unsigned int devfn,
-			    int where, int size, u32 *val)
+static int sg2042_cdns_pcie_config_read(struct pci_bus *bus, unsigned int devfn,
+				    int where, int size, u32 *value)
 {
-	unsigned long addr;
-	unsigned int value, offset;
-	void __iomem *aligned_addr;
+	if (pci_is_root_bus(bus))
+		return pci_generic_config_read32(bus, devfn, where, size,
+						 value);
 
-	if ((bus->number != 0) && (bus->number != 0x40) &&
-	    (bus->number != 0x80) && (bus->number != 0xc0))
-		return pci_generic_config_read(bus, devfn, where, size, val);
-
-	addr = (unsigned long)bus->ops->map_bus(bus, devfn, where);
-	if (!addr) {
-		*val = ~0;
-		return PCIBIOS_DEVICE_NOT_FOUND;
-	}
-
-	if (size == 1) {
-		offset = addr & 0x3;
-		aligned_addr = (void __iomem *)(addr & ~0x3UL);
-		value = readl(aligned_addr);
-		*val = (value >> (8 * offset)) & 0xff;
-	} else if (size == 2) {
-		WARN_ON((addr & 0x1) != 0); // address should be aligned to 2 bytes
-		offset = addr & 0x3;
-		aligned_addr = (void __iomem *)(addr & ~0x3UL);
-		value = readl(aligned_addr);
-		*val = (value >> (8 * offset)) & 0xffff;
-	} else {
-		WARN_ON((addr & 0x3) != 0); // address should be aligned to 4 bytes
-		*val = readl((void __iomem *)(addr));
-	}
-
-	return PCIBIOS_SUCCESSFUL;
+	return pci_generic_config_read(bus, devfn, where, size, value);
 }
 
-static int cdns_pcie_config_write(struct pci_bus *bus, unsigned int devfn,
-			     int where, int size, u32 val)
+static int sg2042_cdns_pcie_config_write(struct pci_bus *bus, unsigned int devfn,
+				     int where, int size, u32 value)
 {
-	unsigned long addr;
-	unsigned int value, offset;
-	void __iomem *aligned_addr;
+	if (pci_is_root_bus(bus))
+		return pci_generic_config_write32(bus, devfn, where, size,
+						  value);
 
-	if ((bus->number != 0) && (bus->number != 0x40) &&
-	    (bus->number != 0x80) && (bus->number != 0xc0))
-		return pci_generic_config_write(bus, devfn, where, size, val);
-
-	addr = (unsigned long)bus->ops->map_bus(bus, devfn, where);
-	if (!addr)
-		return PCIBIOS_DEVICE_NOT_FOUND;
-
-	if (size == 1) {
-		offset = addr & 0x3;
-		aligned_addr = (void __iomem *)(addr & ~0x3UL);
-		value = readl(aligned_addr);
-		value &= ~(0xFF << (8 * offset));
-		value |= ((val << (8 * offset)) & (0xFF << (8 * offset)));
-		writel(value, aligned_addr);
-	} else if (size == 2) {
-		WARN_ON((addr & 0x1) != 0);
-		offset = addr & 0x3;
-		aligned_addr = (void __iomem *)(addr & ~0x3UL);
-		value = readl(aligned_addr);
-		value &= ~(0xFFFF << (8 * offset));
-		value |= ((val << (8 * offset)) & (0xFFFF << (8 * offset)));
-		writel(value, aligned_addr);
-	} else {
-		WARN_ON((addr & 0x3) != 0);
-		writel(val, (void __iomem *)(addr));
-	}
-
-	return PCIBIOS_SUCCESSFUL;
+	return pci_generic_config_write(bus, devfn, where, size, value);
 }
-
 
 static struct pci_ops cdns_pcie_host_ops = {
 	.map_bus	= cdns_pci_map_bus,
-	.read		= cdns_pcie_config_read,
-	.write		= cdns_pcie_config_write,
+	.read		= sg2042_cdns_pcie_config_read,
+	.write		= sg2042_cdns_pcie_config_write,
 };
 
 static const struct of_device_id cdns_pcie_host_of_match[] = {
