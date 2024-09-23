@@ -518,10 +518,6 @@ static int cdns_pcie_msi_setup(struct sg2042_pcie *pcie)
 	return ret;
 }
 
-static int cdns_pcie_irq_parse_and_map_pci(const struct pci_dev *dev, u8 slot, u8 pin)
-{
-	return 0; /* Proper return code 0 == NO_IRQ */
-}
 // mango 私有逻辑，需要保留
 //////////////////////////////////////////////////////////////////
 
@@ -552,7 +548,7 @@ static int sg2042_pcie_host_probe(struct platform_device *pdev)
 	bridge = devm_pci_alloc_host_bridge(dev, sizeof(*rc));
 	if (!bridge)
 		return -ENOMEM;
-
+	bridge->ops = &cdns_pcie_host_ops;
 	rc = pci_host_bridge_priv(bridge);
 
 	cdns_pcie = &rc->pcie;
@@ -560,6 +556,8 @@ static int sg2042_pcie_host_probe(struct platform_device *pdev)
 	cdns_pcie->ops = &cdns_mango_ops;
 	pcie->cdns_pcie = cdns_pcie;
 
+	////////////////////////////////////////////////////////////
+	// parse dts for sg2042
 	np_top = of_parse_phandle(np, "pcie-syscon", 0);
 	if (!np_top) {
 		dev_err(dev, "%s can't get pcie-syscon node\n", __func__);
@@ -595,6 +593,7 @@ static int sg2042_pcie_host_probe(struct platform_device *pdev)
 		goto err_get_sync;
 	}
 
+	////////////////////////////////////////////////////////////
 	// do sg2042 related initialization work
 	// FIXME: 下面这段逻辑是从原来的 cdns_pcie_host_init 里挪出来的
 	// 但是感觉也可以和下面一段逻辑合并，都是处理 not use top-intc 的情况
@@ -626,17 +625,6 @@ static int sg2042_pcie_host_probe(struct platform_device *pdev)
 			goto err_init_irq;
 		}
 	}
-
-	bridge->dev.parent = dev; // FIXME: 这个设置有何用？
-	bridge->ops = &cdns_pcie_host_ops;
-	// FIXME: 这个设置有何用？
-	if (pcie->top_intc_used == 1)
-		bridge->map_irq = of_irq_parse_and_map_pci;
-	else
-		bridge->map_irq = cdns_pcie_irq_parse_and_map_pci;
-	bridge->swizzle_irq = pci_common_swizzle; // FIXME: 这个设置有何用？
-	if (pcie->top_intc_used == 0)
-		bridge->sysdata = pcie; // FIXME: 这个设置有何用？
 
 	if (pcie->top_intc_used == 0) {
 		ret = cdns_pcie_msi_setup(pcie);
