@@ -290,41 +290,6 @@ static irqreturn_t cdns_handle_msi_irq(struct sg2042_pcie *pcie)
 	return ret;
 }
 
-static irqreturn_t cdns_pcie_irq_handler(int irq, void *arg)
-{
-	struct sg2042_pcie *pcie = arg;
-	u32 status = 0;
-	u32 st_msi_in_bit = 0;
-	u32 clr_msi_in_bit = 0;
-
-	pr_info("----> %s\n", __func__);
-
-	if (pcie->link_id == 1) {
-		st_msi_in_bit = CDNS_PCIE_IRS_REG0810_ST_LINK1_MSI_IN_BIT;
-		clr_msi_in_bit = CDNS_PCIE_IRS_REG0804_CLR_LINK1_MSI_IN_BIT;
-	} else {
-		st_msi_in_bit = CDNS_PCIE_IRS_REG0810_ST_LINK0_MSI_IN_BIT;
-		clr_msi_in_bit = CDNS_PCIE_IRS_REG0804_CLR_LINK0_MSI_IN_BIT;
-	}
-
-	regmap_read(pcie->syscon, CDNS_PCIE_IRS_REG0810, &status);
-	if ((status >> st_msi_in_bit) & 0x1) {
-		WARN_ON(!IS_ENABLED(CONFIG_PCI_MSI));
-
-		//clear msi interrupt bit reg0810[2]
-		regmap_read(pcie->syscon, CDNS_PCIE_IRS_REG0804, &status);
-		status |= ((u32)0x1 << clr_msi_in_bit);
-		regmap_write(pcie->syscon, CDNS_PCIE_IRS_REG0804, status);
-
-		status &= ~((u32)0x1 << clr_msi_in_bit);
-		regmap_write(pcie->syscon, CDNS_PCIE_IRS_REG0804, status);
-
-		cdns_handle_msi_irq(pcie);
-	}
-
-	return IRQ_HANDLED;
-}
-
 /* Chained MSI interrupt service routine */
 static void cdns_chained_msi_isr(struct irq_desc *desc)
 {
@@ -616,16 +581,6 @@ static int sg2042_pcie_host_probe(struct platform_device *pdev)
 			dev_err(dev, "failed to get MSI irq\n");
 			goto err_init_irq;
 		}
-#if 1
-		ret = devm_request_irq(dev, pcie->msi_irq, cdns_pcie_irq_handler,
-				       IRQF_SHARED | IRQF_NO_THREAD,
-				       "cdns-pcie-irq", pcie);
-
-		if (ret) {
-			dev_err(dev, "failed to request MSI irq\n");
-			goto err_init_irq;
-		}
-#endif
 	}
 
 	if (pcie->top_intc_used == 0) {
