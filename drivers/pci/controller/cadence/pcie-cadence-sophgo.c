@@ -52,13 +52,12 @@ struct sg2042_pcie {
 	u32			msix_supported;
 	struct irq_domain	*msi_domain;
 	int			msi_irq;
-	struct irq_domain	*irq_domain;
+	struct irq_domain	*irq_domain_parent;
 	dma_addr_t		msi_data;
 	void			*msi_page;
 	struct irq_chip		*msi_irq_chip;
 	u32			num_vectors;
 	u32			num_applied_vecs;
-	u32			irq_mask[MAX_MSI_CTRLS];
 	raw_spinlock_t		lock;
 	DECLARE_BITMAP(msi_irq_in_use, MAX_MSI_IRQS);
 	struct regmap		*syscon;
@@ -266,7 +265,7 @@ static irqreturn_t cdns_handle_msi_irq(struct sg2042_pcie *pcie)
 		pos = 0;
 		while ((pos = find_next_bit(&val, MAX_MSI_IRQS_PER_CTRL,
 					    pos)) != MAX_MSI_IRQS_PER_CTRL) {
-			irq = irq_find_mapping(pcie->irq_domain,
+			irq = irq_find_mapping(pcie->irq_domain_parent,
 					       (i * MAX_MSI_IRQS_PER_CTRL) +
 					       pos);
 			generic_handle_irq(irq);
@@ -278,7 +277,7 @@ static irqreturn_t cdns_handle_msi_irq(struct sg2042_pcie *pcie)
 		ret = IRQ_HANDLED;
 		for (i = 0; i <= num_vectors; i++) {
 			for (pos = 0; pos < MAX_MSI_IRQS_PER_CTRL; pos++) {
-				irq = irq_find_mapping(pcie->irq_domain,
+				irq = irq_find_mapping(pcie->irq_domain_parent,
 						       (i * MAX_MSI_IRQS_PER_CTRL) +
 						       pos);
 				if (!irq)
@@ -297,6 +296,8 @@ static irqreturn_t cdns_pcie_irq_handler(int irq, void *arg)
 	u32 status = 0;
 	u32 st_msi_in_bit = 0;
 	u32 clr_msi_in_bit = 0;
+
+	pr_info("----> %s\n", __func__);
 
 	if (pcie->link_id == 1) {
 		st_msi_in_bit = CDNS_PCIE_IRS_REG0810_ST_LINK1_MSI_IN_BIT;
@@ -460,21 +461,21 @@ static int cdns_pcie_allocate_domains(struct sg2042_pcie *pcie)
 	struct device *dev = pcie->cdns_pcie->dev;
 	struct fwnode_handle *fwnode = of_node_to_fwnode(dev->of_node);
 
-	pcie->irq_domain = irq_domain_create_linear(fwnode, pcie->num_vectors,
+	pcie->irq_domain_parent = irq_domain_create_linear(fwnode, pcie->num_vectors,
 					       &cdns_pcie_msi_domain_ops, pcie);
-	if (!pcie->irq_domain) {
+	if (!pcie->irq_domain_parent) {
 		dev_err(dev, "Failed to create IRQ domain\n");
 		return -ENOMEM;
 	}
 
-	irq_domain_update_bus_token(pcie->irq_domain, DOMAIN_BUS_NEXUS);
+	irq_domain_update_bus_token(pcie->irq_domain_parent, DOMAIN_BUS_NEXUS);
 
 	pcie->msi_domain = pci_msi_create_irq_domain(fwnode,
 						   &cdns_pcie_msi_domain_info,
-						   pcie->irq_domain);
+						   pcie->irq_domain_parent);
 	if (!pcie->msi_domain) {
 		dev_err(dev, "Failed to create MSI domain\n");
-		irq_domain_remove(pcie->irq_domain);
+		irq_domain_remove(pcie->irq_domain_parent);
 		return -ENOMEM;
 	}
 
@@ -491,7 +492,7 @@ static void cdns_pcie_free_msi(struct sg2042_pcie *pcie)
 	}
 
 	irq_domain_remove(pcie->msi_domain);
-	irq_domain_remove(pcie->irq_domain);
+	irq_domain_remove(pcie->irq_domain_parent);
 
 	if (pcie->msi_page)
 		dma_free_coherent(dev, 1024, pcie->msi_page, pcie->msi_data);
@@ -615,7 +616,7 @@ static int sg2042_pcie_host_probe(struct platform_device *pdev)
 			dev_err(dev, "failed to get MSI irq\n");
 			goto err_init_irq;
 		}
-
+#if 1
 		ret = devm_request_irq(dev, pcie->msi_irq, cdns_pcie_irq_handler,
 				       IRQF_SHARED | IRQF_NO_THREAD,
 				       "cdns-pcie-irq", pcie);
@@ -624,6 +625,7 @@ static int sg2042_pcie_host_probe(struct platform_device *pdev)
 			dev_err(dev, "failed to request MSI irq\n");
 			goto err_init_irq;
 		}
+#endif
 	}
 
 	if (pcie->top_intc_used == 0) {
