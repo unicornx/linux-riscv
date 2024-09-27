@@ -101,14 +101,16 @@
 //    触发 PCI 控制器的 RC 通过中断源向 PLIC 上报中断。所有的 MSI 都走一条中断源上报给 CPU， 触发 cdns_chained_msi_isr
 // 4）cdns_chained_msi_isr 的处理逻辑：
 //    首先读取 PCIe reg810 获取状态，不为0 说明有中断发生
-//    先清中断： FIXME：为啥先清中断？
+//    先清中断： FIXME ：为啥先清中断？
 //    -> cdns_handle_msi_irq
 // 5) cdns_handle_msi_irq 逻辑：
-//    按照 pcie->num_applied_vecs 进行循环，FIXME：这个很奇怪，这个值是设备插入时记录的 hwirq，在中断发生时如果中间还有新的
+//    按照 pcie->num_applied_vecs 进行循环， FIXME ：这个很奇怪，这个值是设备插入时记录的 hwirq，在中断发生时如果中间还有新的
 //    设备插入 slot，这个值是会发生变化的。
 //    读取连续内存的内容，针对不为 0 的 bit 进行处理，
 //    逻辑比较怪异，FIXME, 为啥要多一步 irq_find_mapping，如果按照 dw 的做法，得到 bitmap bit 后直接 generic_handle_domain_irq 不可以吗？
-//    处理后会再来一遍，又是为何？FIXME
+//    处理后会再来一遍，又是为何？ FIXME
+
+// FIXME：是否可以全部使用 top-intc?
 
 struct sg2042_pcie {
 	struct cdns_pcie	*cdns_pcie;
@@ -381,6 +383,7 @@ static irqreturn_t cdns_handle_msi_irq(struct sg2042_pcie *pcie)
 
 // FIXME: 这个函数实际运行中并没有看到会被触发，但根据算能开发人员说硬件上设计了这个中断源，用于 rc 上报，所以需要保留
 // 具体怎么处理还要再看看。
+// 另外，为啥这个 RC 的上报也会涉及 MSI 的相关 message address 内存区处理，难道 RC 也会通过 MSI 机制写内存？
 // 该函数的处理逻辑和 cdns_chained_msi_isr 类似，如果保留也是可以优化的。
 static irqreturn_t cdns_pcie_irq_handler(int irq, void *arg)
 {
@@ -447,9 +450,14 @@ static void cdns_chained_msi_isr(struct irq_desc *desc)
 		status |= ((u32)0x1 << clr_msi_in_bit);
 		regmap_write(pcie->syscon, CDNS_PCIE_IRS_REG0804, status);
 
+		// FIXME: 为啥对 804 写 1 然后还要写 0？第二步写 0 是有什么目的吗
+		// 可能不需要再写0了
 		status &= ~((u32)0x1 << clr_msi_in_bit);
 		regmap_write(pcie->syscon, CDNS_PCIE_IRS_REG0804, status);
 
+		// FIXME: 为啥是在 cdns_handle_msi_irq之前清，而不是之后？
+		// A: 先清中断，是想让其他中断能够继续上报, 方便后面处理
+		// 但和硬件确认后，似乎清不清中断其实都不会阻碍 MSI 中断上报。这个还要确认一下。
 		cdns_handle_msi_irq(pcie);
 	}
 

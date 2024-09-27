@@ -38,11 +38,12 @@ struct top_intc_data {
 	DECLARE_BITMAP(irq_bitmap, MAX_IRQ_NUMBER);
 	spinlock_t lock;
 
-	void __iomem *reg_sta;
-	void __iomem *reg_set;
-	void __iomem *reg_clr;
+	void __iomem *reg_sta; // 状态寄存器，对应 TRM 上的 10.1.31 GP_INTR_REGISTER 的 GP_INTR_REGISTER_0
+	void __iomem *reg_set; // 对应 TRM 上的 10.1.32 GP_INTR0_SET: offset 0x300
+	void __iomem *reg_clr; // 对应 TRM 上的 10.1.33 GP_INTR0_CLR: offset 0x304
 
-	phys_addr_t reg_set_phys;
+	phys_addr_t reg_set_phys; // 用于 MSI 的 address，对应 reg_set 的首地址（物理）
+				// 该 32 bit 的寄存器上的每一位对应一个 MSI 中断
 
 	irq_hw_number_t		plic_hwirqs[MAX_IRQ_NUMBER];
 	int			plic_irqs[MAX_IRQ_NUMBER];
@@ -177,8 +178,11 @@ static void top_intc_ack_irq(struct irq_data *d)
 	int reg_off, bit_off;
 	struct irq_data *plic_irq_data = data->plic_irq_datas[d->hwirq];
 
+	// FIXME: hwirq 是一个 [0, 32), reg_bitwidth 是 32，那么 reg_off 永远是 0？
 	reg_off = d->hwirq / data->reg_bitwidth;
+	// 所以 bit_off 就等于 hwirq
 	bit_off = d->hwirq - data->reg_bitwidth * reg_off;
+	// reg_clr 本质上就是一个 32 位的寄存器
 	writel(1 << bit_off, (unsigned int *)data->reg_clr + reg_off);
 
 	pr_debug("%s %ld, parent %s/%ld\n", __func__, d->hwirq,
@@ -302,6 +306,8 @@ static int top_intc_probe(struct platform_device *pdev)
 	data->pdev = pdev;
 	spin_lock_init(&data->lock);
 
+	// FIXME 为啥要区分 for_msi
+	// dts 中 top_intc 只有 for-msi 的，所以这个属性是否可以做成必选的，从而简化代码的逻辑？
 	if (device_property_read_bool(&pdev->dev, "for-msi")) {
 		dev_info(&pdev->dev, "is a msi parent\n");
 		data->for_msi = 1;
