@@ -15,6 +15,7 @@
 #include <linux/mfd/syscon.h>
 #include <linux/regmap.h>
 
+#include <linux/of_irq.h>
 
 #include "pcie-cadence.h"
 #include "pcie-cadence-sophgo.h"
@@ -311,11 +312,40 @@ static struct msi_domain_info cdns_pcie_top_intr_msi_domain_info = {
 	.chip	= &cdns_pcie_msi_irq_chip,
 };
 
+static struct irq_domain *get_irq_domain(struct device *dev)
+{
+	struct device_node *np = dev->of_node;
+	struct device_node *parent;
+	struct irq_domain *domain;
+
+	if (!of_find_property(np, "interrupt-parent", NULL)) {
+		pr_info("----> of_find_property failed!\n");
+		return NULL;
+	}
+
+	parent = of_irq_find_parent(np);
+	if (!parent) {
+		pr_info("----> of_irq_find_parent failed!\n");
+		return ERR_PTR(-ENXIO);
+	}
+
+	domain = irq_find_host(parent);
+	of_node_put(parent);
+	if (!domain) {
+		/* domain not registered yet */
+		pr_info("----> irq_find_host failed!\n");
+		return ERR_PTR(-EPROBE_DEFER);
+	}
+
+	return domain;
+}
+
+
 static int cdns_pcie_msi_setup_for_top_intc(struct sg2042_pcie *pcie, int intc_id)
 {
-	struct irq_domain *irq_parent = cdns_pcie_get_parent_irq_domain(intc_id);
 	struct device *dev = pcie->cdns_pcie->dev;
 	struct fwnode_handle *fwnode = of_node_to_fwnode(dev->of_node);
+	struct irq_domain *irq_parent = get_irq_domain(dev);
 
 	if (pcie->msix_supported == 1) {
 		pcie->msi_domain = pci_msi_create_irq_domain(fwnode,

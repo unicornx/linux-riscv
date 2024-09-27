@@ -51,20 +51,6 @@ struct top_intc_data {
 	int			tic_to_plic[MAX_IRQ_NUMBER]; // mapping from tic hwirq to plic hwirq
 };
 
-// workaround for using in other modules
-struct top_intc_data *tic_data[TOP_INTC_NUM];
-
-struct irq_domain *cdns_pcie_get_parent_irq_domain(int intc_id)
-{
-	if (intc_id >= TOP_INTC_NUM)
-		return NULL;
-
-	if (tic_data[intc_id])
-		return tic_data[intc_id]->domain;
-	else
-		return NULL;
-}
-
 static int top_intc_domain_translate(struct irq_domain *d,
 				    struct irq_fwspec *fwspec,
 				    unsigned long *hwirq,
@@ -379,10 +365,6 @@ static int top_intc_probe(struct platform_device *pdev)
 
 	if (data->for_msi) {
 		irq_domain_update_bus_token(data->domain, DOMAIN_BUS_NEXUS);
-		if (tic_data[intc_id])
-			dev_err(&pdev->dev, "tic_data is not empty, %s\n",
-				dev_name(&tic_data[intc_id]->pdev->dev));
-		tic_data[intc_id] = data;
 	}  else {
 		/*
 		 * populate child nodes. when test device node is a child, it will not be
