@@ -165,6 +165,7 @@ static void top_intc_ack_irq(struct irq_data *d)
 	struct irq_data *plic_irq_data = data->plic_irq_datas[d->hwirq];
 
 	// FIXME: hwirq 是一个 [0, 32), reg_bitwidth 是 32，那么 reg_off 永远是 0？
+	// A: 可以优化
 	reg_off = d->hwirq / data->reg_bitwidth;
 	// 所以 bit_off 就等于 hwirq
 	bit_off = d->hwirq - data->reg_bitwidth * reg_off;
@@ -294,6 +295,7 @@ static int top_intc_probe(struct platform_device *pdev)
 
 	// FIXME 为啥要区分 for_msi
 	// dts 中 top_intc 只有 for-msi 的，所以这个属性是否可以做成必选的，从而简化代码的逻辑？
+	// 这个功能先不支持，默认只支持 MSI
 	if (device_property_read_bool(&pdev->dev, "for-msi")) {
 		dev_info(&pdev->dev, "is a msi parent\n");
 		data->for_msi = 1;

@@ -105,13 +105,27 @@
 //    先清中断： FIXME ：为啥先清中断？
 //    -> cdns_handle_msi_irq
 // 5) cdns_handle_msi_irq 逻辑：
-//    按照 pcie->num_applied_vecs 进行循环， FIXME ：这个很奇怪，这个值是设备插入时记录的 hwirq，在中断发生时如果中间还有新的
-//    设备插入 slot，这个值是会发生变化的。
+//    按照 pcie->num_applied_vecs 进行循环。增加这个成员的作用是为了代码优化，避免每次都要循环 512。这个值是设备插入时记录的 hwirq，在中断发生时如果中间还有新的
+//    设备插入 slot，这个值根据设备中断申请会发生变化的 (递增)。
 //    读取连续内存的内容，针对不为 0 的 bit 进行处理，
 //    逻辑比较怪异，FIXME, 为啥要多一步 irq_find_mapping，如果按照 dw 的做法，得到 bitmap bit 后直接 generic_handle_domain_irq 不可以吗？
-//    处理后会再来一遍，又是为何？ FIXME
+//    处理后会再来一遍，又是为何？ FIXME，可以看看可能可以参考 dw 的处理方式优化。
 
-// FIXME：是否可以全部使用 top-intc?
+// FIXME：是否可以全部使用 top-intc? 
+// A: 不可以，需要支持旧的 pcie 卡
+// 有如下原因和需求：
+// 走 pcie-intc 时，存放 MSI data 的内存地址中有效位限制在低 32位（具体参考
+// dma_alloc_coherent 函数中设置了 GFP_DMA32 的标记），这样就保证了
+// EP 上无论存放 MSI addr 是 32 位的，还是 64 位的，都可以存放有效的 32 位地址。
+// 这样就保证了 pcie-intc 方式下，PCIe 的 slot 上插 32Bit/64Bit的
+// EP 设备都可以，也就是兼容 32 位的老卡和 64 位的新卡。
+// 走 top-intc 时, 存放 MSI data 的内存地址（寄存器）GP_INTR1_SET 是 64 位的。
+// 但是 SG2042 的 top-intc 不支持对 msi addr 进行转换，所以在 top-intc 方式下
+// slot 卡上连接的 EP 设备只能是 64bit msi addr, 这也造成了走 top-intc 的 slot
+// 只能插 64位 msi addr 的新卡。
+// 所以为了能够支持一些旧卡，pcie-intc 方式仍然需要支持，现实中主要是为了支持一些旧的显卡。
+
+
 
 struct sg2042_pcie {
 	struct cdns_pcie	*cdns_pcie;
@@ -411,10 +425,21 @@ static irqreturn_t cdns_handle_msi_irq(struct sg2042_pcie *pcie)
 	return ret;
 }
 
-// FIXME: 这个函数实际运行中并没有看到会被触发，但根据算能开发人员说硬件上设计了这个中断源，用于 rc 上报，所以需要保留
-// 具体怎么处理还要再看看。
-// 另外，为啥这个 RC 的上报也会涉及 MSI 的相关 message address 内存区处理，难道 RC 也会通过 MSI 机制写内存？
-// 该函数的处理逻辑和 cdns_chained_msi_isr 类似，如果保留也是可以优化的。
+// FIXME: 这个函数实际运行中并没有看到会被触发，
+// 经和硬件 IC 了解，MSI 中断目前由 PCIe 设备触发产生。
+// RC 也会有 error 中断上报，但不是走 MSI（所以这个 cdns_pcie_irq_handler 本身的处理逻辑是不对的），同时也是走相同的中断线上到 plic
+// 相关的状态位是检查 IRS_REG0810 的 
+// ST_LINK1_LINK_DOWN_RESET_OUT
+// ST_LINK0_LINK_DOWN_RESET_OUT_CCIX
+// ST_LINK0_LINK_DOWN_RESET_OUT
+// ST_LINK1_HOT_RESET_OUT 
+// ST_LINK0_HOT_RESET_OUT
+// 但目前这些 error int 都 mask 了，所以也不会产生
+// 此外，还有一些旧的 PCIe 设备上报中断不走 MSI，还是走旧的 INTx, 这体现在 IRS_REG0810 的
+// ST_LINK1_INT_ACK
+// ST_LINK0_INT_ACK
+// 但考虑到目前不太可能遇到这么旧的设备，所以驱动不支持
+// 综上所述：upstream 时先删掉这个函数逻辑
 static irqreturn_t cdns_pcie_irq_handler(int irq, void *arg)
 {
 	struct sg2042_pcie *pcie = arg;
@@ -480,14 +505,16 @@ static void cdns_chained_msi_isr(struct irq_desc *desc)
 		status |= ((u32)0x1 << clr_msi_in_bit);
 		regmap_write(pcie->syscon, CDNS_PCIE_IRS_REG0804, status);
 
-		// FIXME: 为啥对 804 写 1 然后还要写 0？第二步写 0 是有什么目的吗
-		// 可能不需要再写0了
+		// FIXME: 为啥对 804 写 1 然后还要写 0？一般不是会自动翻转吗？
+		// A: 和硬件 IC 确认了一下，这步不能省，硬件不会自动翻转为 0，需要软件手动翻转
 		status &= ~((u32)0x1 << clr_msi_in_bit);
 		regmap_write(pcie->syscon, CDNS_PCIE_IRS_REG0804, status);
 
 		// FIXME: 为啥是在 cdns_handle_msi_irq之前清，而不是之后？
 		// A: 先清中断，是想让其他中断能够继续上报, 方便后面处理
-		// 但和硬件确认后，似乎清不清中断其实都不会阻碍 MSI 中断上报。这个还要确认一下。
+		// 但和硬件确认后，清中断只是将 status 标志恢复为 0，但 MSI data 
+		// 的写入操作和中断上报完全是异步的，RC 一旦收到 EP 的 MSI 通知
+		// 就会对 msi data 内存区进行写，和 cpu 这边是否去 clear 并无关系。
 		cdns_handle_msi_irq(pcie);
 	}
 
