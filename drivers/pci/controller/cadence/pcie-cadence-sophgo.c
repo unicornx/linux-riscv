@@ -142,6 +142,12 @@ struct sg2042_pcie {
 	// 第三个 slot 使用 top-intc，不支持 msix
 	// 在 cdns_pcie_msi_setup_for_top_intc 中区分 pci_msi_create_irq_domain 传入的 MSI domain info
 	// 也就是说这个标志会影响 msi_domain 的创建
+	// FIXME: 决定是否支持 msix, 关键是设置 msi_domain_info 结构体的 flags 属性时
+	// 是否添加 MSI_FLAG_PCI_MSIX 选项。一旦加上该选项，则 RC 将对支持 MSI-X
+	// 的设备优先使用 msi-x 中断。这会导致一些使用大量 msi-x 中断的设备在上电
+	// 时申请过多的中断导致超出 top-intc 的能力（最大 32 个中断）而失败。所以
+	// 在 upstream 时，我们按照最低能力级别对 RC 进行配置，即只支持单中断方式
+	// 的 MSI 方式。所以这个配置选项可以删掉。
 	u32			msix_supported;
 	// 用于存放 pci_msi_create_irq_domain 的结果
 	// 这个变量对于使用或者于不使用 top-intc 的情况都会用到
@@ -203,10 +209,8 @@ static const struct of_device_id cdns_pcie_host_of_match[] = {
 };
 
 // 用于 !top-intc
-// 分配一块 DMA 用于存放 msi data, 然后将该内存的物理地址告诉 pcie 内部算能扩展的中断控制器
+// 分配一块连续的 DMA 内存用于存放 msi data, 然后将该内存的物理地址告诉 pcie 内部算能扩展的中断控制器
 // 本质上是通知给 RC。
-// FIXME：具体运行时最好和 IC 人员确认一下是不是这个设计，以及数据区中是否有格式要求？
-
 static int cdns_pcie_msi_init(struct sg2042_pcie *pcie)
 {
 	struct device *dev = pcie->cdns_pcie->dev;
@@ -252,7 +256,12 @@ static int cdns_pcie_msi_init(struct sg2042_pcie *pcie)
 
 // FIXME：有关 check_vendor_id 我发现 a42bea5b2840bf1e33aafa4158d26c064227dfe8
 // 这个 commit 里 sophgo 塞了一些东西在内核里（除了驱动和 dts 之外的部分），
-// 这些东西好 upstream 吗？感觉需要拿出来讨论一下
+// 这些东西无法 upstream， 需要拿掉
+// 这个补丁的目的是针对 top-intc 方式下，如果 msix_supported 为 1 时，我们还可以
+// 通过第二级白名单控制是否指定给一些特定的 pcie 设备启用 MSIX。
+// 此外该补丁还修改了一些支持 MSI-X 的 pcie 设备的最大支持的 MSI-X 中断的个数。
+// 该补丁移除后，结合针对 msix_supported 我们只支持 0，即不开 MSIX，所以 upstream
+// 的代码将默认只支持单中断的 MSI 方式，应该不受影响。
 struct vendor_id_list vendor_id_list[] = {
 	{"Inter X520", 0x8086, 0x10fb},
 	{"Inter I40E", 0x8086, 0x1572},
