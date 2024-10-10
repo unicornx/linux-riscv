@@ -726,7 +726,7 @@ static int sg2042_pcie_host_probe(struct platform_device *pdev)
 	of_property_read_u16(np, "link-id", &pcie->link_id);
 
 	pcie->msix_supported = 0;
-	of_property_read_u32(np, "msix-supported", &pcie->msix_supported);
+	//of_property_read_u32(np, "msix-supported", &pcie->msix_supported);
 
 	pcie->top_intc_used = 0;
 	of_property_read_u32(np, "top-intc-used", &pcie->top_intc_used);
