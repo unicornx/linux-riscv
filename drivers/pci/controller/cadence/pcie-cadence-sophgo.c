@@ -1,7 +1,10 @@
 // SPDX-License-Identifier: GPL-2.0
-// Copyright (c) 2017 Cadence
-// Cadence PCIe host controller driver.
-// Author: Cyrille Pitchen <cyrille.pitchen@free-electrons.com>
+/*
+ * pcie-sg2042 - PCIe controller driver for Sophgo SG2042 SoC
+ *
+ * Copyright (C) 2024 Sophgo Technology Inc.
+ * Copyright (C) 2024 Chen Wang <unicorn_wang@outlook.com>
+ */
 
 #include <linux/kernel.h>
 #include <linux/of_address.h>
@@ -43,95 +46,11 @@
 
 #define CDNS_PLAT_CPU_TO_BUS_ADDR       0xCFFFFFFFFF
 
-
-// dw 的设计
-// 1）dw_pcie_msi_host_init 中通过 dmam_alloc_coherent 分配的只是一个 64 bit 的数据区
-// 2）PCIe 设备插入后，触发 dw_pcie_irq_domain_alloc（domain.alloc） 中的实现：
-//    根据传入的 virq 和 范围，在 bitmap 中找到一块连续的 area 并将其映射设置到 domain 中
-//    映射通过 irq_domain_set_info 完成，最终完成：bitmap bit <-> virq（IRQ#), domain 中的 hwirq 值就是 bitmap bit
-// 3）还是在 PCIe 设备上电出发的初始化过程中
-//    RC 驱动调用 dw_pci_setup_msi_msg (chip.irq_compose_msi_msg）中将该 8 字节的首地址和 hwirq 组装 msg
-//    RC 在设备的 msi capability 中的写入：
-//    message address 记录的是这个 8 字节首地址
-//    message data 记录的是该设备的 hwirq（即 bitmap 中的 bit）
-
-// 中断这里：
-// 1) 先尝试通过 DTS 获取 interrupt source 和 IRQ#
-//    正常应该会通过 interrupt-names msi0/msi1/... 最多 8 个。
-//    一个 IRQ# 对应一个 msi_irq, 即 msi_irq[MAX_MSI_CTRLS]， 这个数组也是 8 个
-//    如果 DTS 中没有 msiX，则默认会退回到一个 IRQ#
-//    dw 的 PCIe RC 支持 mulitple 方式的 MSI 中断源，这个可以在其 dw_pcie_msi_domain_info.flags
-//    设置中可以看出来，其设置了 MSI_FLAG_MULTI_PCI_MSI。最多 8 路 upstream 中断源
-// 2) 通过 irq_set_chained_handler_and_data 为每个 IRQ# 设置 irq handler 为 dw_chained_msi_isr
-//    也就是说任一路进来的处理函数都是同一个。
-// 3）设备中断发生时，会根据 RC 设置的 messaage addr 和 message data 触发 MSI。
-// 4）进入 dw_chained_msi_isr 处理 -> dw_handle_msi_irq
-//    因为支持多路中断源，每一路对应一个 ctrl，所以需要对每一个 ctrl 进行检查
-//    ctrl 是 PCI 控制器上的一组寄存器 block，首地址为 PCIE_MSI_INTR0_STATUS，每个 block size 是 MSI_REG_CTRL_BLOCK_SIZE
-//    针对每一个 reg block，如果读出来其值 status 不为 0，说明该 reg block 管理的多路 hw irq 中
-//    有中断发生，所以继续检查该 status 的对应位。对每一个为 1 的 位调用
-//    generic_handle_domain_irq(pp->irq_domain,  (i * MAX_MSI_IRQS_PER_CTRL) + pos);
-//    注意这里第二个参数即 hwirq。因为我们在 domain.alloc 中的实现 已经 建立了 bit <-> virq 的映射
-//    所以这里传入的第一个参数中的 irq_domain 会帮助我们翻译这个映射，将 hwirq（bitmap bit）转化为
-//    virq(IRQ#)
-
-// 我们的流程，以 linuxboot 启动过程中显卡作为 PCIe 设备的例子
-// 1）PCI 控制器 RC 初始化
-//    cdns_pcie_msi_init 中分配一个 512 * 8 字节的连续内存
-// 2）radeon 显卡插入后的 probe 触发 
-//    radeon_pci_probe -> ... radeon_irq_kms_init -> pci_enable_msi -> ... 
-//    -> __msi_domain_alloc_irqs -> ... -> irq_domain_alloc_irqs_parent 
-//    -> (.alloc)cdns_pcie_irq_domain_alloc
-//    根据传入的 virq 和 范围，在 bitmap 中找到一块连续的 area 并将其映射设置到 domain 中
-//    映射通过 irq_domain_set_info 完成，最终完成：bitmap bit <-> virq（IRQ#), domain 中的 hwirq 值就是 bitmap bit
-// 3) radeon_pci_probe -> ... radeon_irq_kms_init -> pci_enable_msi -> ... 
-//    -> __msi_domain_alloc_irqs -> irq_domain_activate_irq -> ... 
-//    -> irq_chip_compose_msi_msg -> (.alloc)cdns_pci_setup_msi_msg
-//    cdns_pci_setup_msi_msg 组装将被发送给设备的 msg
-//    message address 是 基地址 + hwirq * 4
-//    message data 是 1
-//    同时记录把此时的 hwirq 记录下来到 pcie->num_applied_vecs
-// 4) 在处理完 cdns_pci_setup_msi_msg 后，会将组装好的 msg 再通过 pci write 写入显卡设备的 msi capability 中
-//    msg 中包含 addr 信息和 data 信息
-//
-// 中断处理流程:
-// 1) sg2042_pcie_host_probe 首先根据 DTS （根据 interrupt-names = "msi";）获取了 PLIC 的中断源对应的 IRQ#，
-//    我们只有一个中断源，所以对应的 cdns_pcie_msi_domain_info.flags 中不能设置 MSI_FLAG_MULTI_PCI_MSI
-// 2）cdns_pcie_msi_setup 中通过 irq_set_chained_handler_and_data 对该 IRQ# 设置了 high level hander 为 cdns_chained_msi_isr
-// 3) 设备下次上报 MSI 中断时，会根据 msi capability 中的 addr 和 data 信息，往该 addr 地址写入 data 信息，这会
-//    触发 PCI 控制器的 RC 通过中断源向 PLIC 上报中断。所有的 MSI 都走一条中断源上报给 CPU， 触发 cdns_chained_msi_isr
-// 4）cdns_chained_msi_isr 的处理逻辑：
-//    首先读取 PCIe reg810 获取状态，不为0 说明有中断发生
-//    先清中断： FIXME ：为啥先清中断？
-//    -> cdns_handle_msi_irq
-// 5) cdns_handle_msi_irq 逻辑：
-//    按照 pcie->num_applied_vecs 进行循环。增加这个成员的作用是为了代码优化，避免每次都要循环 512。这个值是设备插入时记录的 hwirq，在中断发生时如果中间还有新的
-//    设备插入 slot，这个值根据设备中断申请会发生变化的 (递增)。
-//    读取连续内存的内容，针对不为 0 的 bit 进行处理，
-//    逻辑比较怪异，FIXME, 为啥要多一步 irq_find_mapping，如果按照 dw 的做法，得到 bitmap bit 后直接 generic_handle_domain_irq 不可以吗？
-//    处理后会再来一遍，又是为何？ FIXME，可以看看可能可以参考 dw 的处理方式优化。
-
-// FIXME：是否可以全部使用 top-intc? 
-// A: 不可以，需要支持旧的 pcie 卡
-// 有如下原因和需求：
-// 走 pcie-intc 时，存放 MSI data 的内存地址中有效位限制在低 32位（具体参考
-// dma_alloc_coherent 函数中设置了 GFP_DMA32 的标记），这样就保证了
-// EP 上无论存放 MSI addr 是 32 位的，还是 64 位的，都可以存放有效的 32 位地址。
-// 这样就保证了 pcie-intc 方式下，PCIe 的 slot 上插 32Bit/64Bit的
-// EP 设备都可以，也就是兼容 32 位的老卡和 64 位的新卡。
-// 走 top-intc 时, 存放 MSI data 的内存地址（寄存器）GP_INTR1_SET 是 64 位的。
-// 但是 SG2042 的 top-intc 不支持对 msi addr 进行转换，所以在 top-intc 方式下
-// slot 卡上连接的 EP 设备只能是 64bit msi addr, 这也造成了走 top-intc 的 slot
-// 只能插 64位 msi addr 的新卡。
-// 所以为了能够支持一些旧卡，pcie-intc 方式仍然需要支持，现实中主要是为了支持一些旧的显卡。
-
-
-
 struct sg2042_pcie {
 	struct cdns_pcie	*cdns_pcie;
 
 	// Fully private members for sg2042
-	u16			pcie_id; // dts 设置了，但是代码中用不到 FIXME
+	u16			pcie_id; // FIXME dts 设置了，但是代码中用不到
 	u16			link_id;
 	u32			top_intc_used;
 
@@ -153,15 +72,15 @@ struct sg2042_pcie {
 	// 这个变量对于使用或者于不使用 top-intc 的情况都会用到
 	struct irq_domain	*msi_domain;
 
-	// 下面的成员都是和 !top-intc 处理有关
+	// 下面的成员都是和 pcie-intc 处理有关
 	int			msi_irq;
 	struct irq_domain	*irq_domain; // FIXME：这个成员名称和结构体名字相同了，不好的编程习惯，建议改掉。
 	dma_addr_t		msi_data;
 	void			*msi_page;
 	struct irq_chip		*msi_irq_chip;
 	u32			num_vectors; // FIXME: 这个成员感觉用处不大。初始化为 MSI_DEF_NUM_VECTORS 就不变的。
-	u32			num_applied_vecs;
-	u32			irq_mask[MAX_MSI_CTRLS]; // FIXME：这个没用上，可以删掉
+	u32			num_applied_vecs; // FIXME：增加这个成员的作用是为了代码优化，避免每次都要循环 512。可能改个名字会更好，仅仅是为了优化。
+	u32			irq_mask[MAX_MSI_CTRLS]; // FIXME 这个没用上，可以删掉
 	raw_spinlock_t		lock;
 	DECLARE_BITMAP(msi_irq_in_use, MAX_MSI_IRQS);
 	struct regmap		*syscon;
@@ -208,9 +127,8 @@ static const struct of_device_id cdns_pcie_host_of_match[] = {
 	{ },
 };
 
-// 用于 !top-intc
-// 分配一块连续的 DMA 内存用于存放 msi data, 然后将该内存的物理地址告诉 pcie 内部算能扩展的中断控制器
-// 本质上是通知给 RC。
+// 用于 pcie-intc
+// 分配一块连续的内存用于存放 msi data, 然后将该内存的物理地址告诉 pcie-intc
 static int cdns_pcie_msi_init(struct sg2042_pcie *pcie)
 {
 	struct device *dev = pcie->cdns_pcie->dev;
@@ -298,7 +216,6 @@ int check_vendor_id(struct pci_dev *dev, struct vendor_id_list vendor_id_list[],
 	return 0;
 }
 
-// top-intc 的处理代码
 static void cdns_pcie_msi_ack_irq(struct irq_data *d)
 {
 	irq_chip_ack_parent(d);
@@ -323,7 +240,7 @@ static struct irq_chip cdns_pcie_msi_irq_chip = {
 	.irq_unmask = cdns_pcie_msi_unmask_irq,
 };
 
-// 这个不是只针对 top-intc, !top-intc 也会用到。
+// 这个不是只针对 top-intc, pcie-intc 也会用到。
 static struct msi_domain_info cdns_pcie_msi_domain_info = {
 	.flags	= (MSI_FLAG_USE_DEF_DOM_OPS | MSI_FLAG_USE_DEF_CHIP_OPS),
 	.chip	= &cdns_pcie_msi_irq_chip,
@@ -388,7 +305,7 @@ static int cdns_pcie_msi_setup_for_top_intc(struct sg2042_pcie *pcie, int intc_i
 	return 0;
 }
 
-// !top-intc
+// pcie-intc
 // 
 /* MSI int handler */
 static irqreturn_t cdns_handle_msi_irq(struct sg2042_pcie *pcie)
@@ -407,6 +324,7 @@ static irqreturn_t cdns_handle_msi_irq(struct sg2042_pcie *pcie)
 		ret = IRQ_HANDLED;
 		val = status;
 		pos = 0;
+		// FIXME: 按照 dw 的做法，得到 bitmap bit 后直接 generic_handle_domain_irq 不可以吗？
 		while ((pos = find_next_bit(&val, MAX_MSI_IRQS_PER_CTRL,
 					    pos)) != MAX_MSI_IRQS_PER_CTRL) {
 			irq = irq_find_mapping(pcie->irq_domain,
@@ -417,6 +335,7 @@ static irqreturn_t cdns_handle_msi_irq(struct sg2042_pcie *pcie)
 		}
 		writel(0, ((void *)(pcie->msi_page) + i * BYTE_NUM_PER_MSI_VEC));
 	}
+	// FIXME: 会再来一遍，据说是为了防止漏中断。可以看看可能可以参考 dw 的处理方式优化。或者作为 vendor 补丁方式
 	if (ret == IRQ_NONE) {
 		ret = IRQ_HANDLED;
 		for (i = 0; i <= num_vectors; i++) {
@@ -482,7 +401,7 @@ static irqreturn_t cdns_pcie_irq_handler(int irq, void *arg)
 	return IRQ_HANDLED;
 }
 
-// !top-intc
+// pcie-intc
 // msi 逻辑会走到这里
 // 核心是调用的 cdns_handle_msi_irq
 /* Chained MSI interrupt service routine */
@@ -680,7 +599,7 @@ static void cdns_pcie_free_msi(struct sg2042_pcie *pcie)
 
 }
 
-// 用于 !top-intc
+// 用于 pcie-intc
 // 在 cdns_pcie_msi_init 后对中断做进一步初始化，FIXME，是否可以和 cdns_pcie_msi_init 合并？
 static int cdns_pcie_msi_setup(struct sg2042_pcie *pcie)
 {
@@ -787,7 +706,7 @@ static int sg2042_pcie_host_probe(struct platform_device *pdev)
 	////////////////////////////////////////////////////////////
 	// do sg2042 related initialization work
 	// FIXME: 下面这段逻辑是从原来的 cdns_pcie_host_init 里挪出来的
-	// 但是感觉也可以和下面一段逻辑合并，都是处理 not use top-intc 的情况
+	// 但是感觉也可以和下面一段逻辑合并，都是处理 pcie-intc 的情况
 	if (pcie->top_intc_used == 0) {
 		pcie->num_vectors = MSI_DEF_NUM_VECTORS;
 		pcie->num_applied_vecs = 0;
