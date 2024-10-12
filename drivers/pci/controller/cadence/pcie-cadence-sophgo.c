@@ -529,6 +529,9 @@ static int sg2042_pcie_host_probe(struct platform_device *pdev)
 
 	struct regmap *syscon;
 
+	pr_info("----> %s\n", __func__);
+	dump_stack();
+
 	pcie = devm_kzalloc(dev, sizeof(*pcie), GFP_KERNEL);
 	if (!pcie)
 		return -ENOMEM;
