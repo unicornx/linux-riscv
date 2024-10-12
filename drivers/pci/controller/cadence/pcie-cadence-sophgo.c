@@ -282,54 +282,6 @@ static irqreturn_t cdns_handle_msi_irq(struct sg2042_pcie *pcie)
 	return ret;
 }
 
-// FIXME: 这个函数实际运行中并没有看到会被触发，
-// 经和硬件 IC 了解，MSI 中断目前由 PCIe 设备触发产生。
-// RC 也会有 error 中断上报，但不是走 MSI（所以这个 cdns_pcie_irq_handler 本身的处理逻辑是不对的），同时也是走相同的中断线上到 plic
-// 相关的状态位是检查 IRS_REG0810 的 
-// ST_LINK1_LINK_DOWN_RESET_OUT
-// ST_LINK0_LINK_DOWN_RESET_OUT_CCIX
-// ST_LINK0_LINK_DOWN_RESET_OUT
-// ST_LINK1_HOT_RESET_OUT 
-// ST_LINK0_HOT_RESET_OUT
-// 但目前这些 error int 都 mask 了，所以也不会产生
-// 此外，还有一些旧的 PCIe 设备上报中断不走 MSI，还是走旧的 INTx, 这体现在 IRS_REG0810 的
-// ST_LINK1_INT_ACK
-// ST_LINK0_INT_ACK
-// 但考虑到目前不太可能遇到这么旧的设备，所以驱动不支持
-// 综上所述：upstream 时先删掉这个函数逻辑
-static irqreturn_t cdns_pcie_irq_handler(int irq, void *arg)
-{
-	struct sg2042_pcie *pcie = arg;
-	u32 status = 0;
-	u32 st_msi_in_bit = 0;
-	u32 clr_msi_in_bit = 0;
-
-	if (pcie->link_id == 1) {
-		st_msi_in_bit = CDNS_PCIE_IRS_REG0810_ST_LINK1_MSI_IN_BIT;
-		clr_msi_in_bit = CDNS_PCIE_IRS_REG0804_CLR_LINK1_MSI_IN_BIT;
-	} else {
-		st_msi_in_bit = CDNS_PCIE_IRS_REG0810_ST_LINK0_MSI_IN_BIT;
-		clr_msi_in_bit = CDNS_PCIE_IRS_REG0804_CLR_LINK0_MSI_IN_BIT;
-	}
-
-	regmap_read(pcie->syscon, CDNS_PCIE_IRS_REG0810, &status);
-	if ((status >> st_msi_in_bit) & 0x1) {
-		WARN_ON(!IS_ENABLED(CONFIG_PCI_MSI));
-
-		//clear msi interrupt bit reg0810[2]
-		regmap_read(pcie->syscon, CDNS_PCIE_IRS_REG0804, &status);
-		status |= ((u32)0x1 << clr_msi_in_bit);
-		regmap_write(pcie->syscon, CDNS_PCIE_IRS_REG0804, status);
-
-		status &= ~((u32)0x1 << clr_msi_in_bit);
-		regmap_write(pcie->syscon, CDNS_PCIE_IRS_REG0804, status);
-
-		cdns_handle_msi_irq(pcie);
-	}
-
-	return IRQ_HANDLED;
-}
-
 // pcie-intc
 // msi 逻辑会走到这里
 // 核心是调用的 cdns_handle_msi_irq
@@ -649,15 +601,6 @@ static int sg2042_pcie_host_probe(struct platform_device *pdev)
 		pcie->msi_irq = platform_get_irq_byname(pdev, "msi");
 		if (pcie->msi_irq <= 0) {
 			dev_err(dev, "failed to get MSI irq\n");
-			goto err_init_irq;
-		}
-
-		ret = devm_request_irq(dev, pcie->msi_irq, cdns_pcie_irq_handler,
-				       IRQF_SHARED | IRQF_NO_THREAD,
-				       "cdns-pcie-irq", pcie);
-
-		if (ret) {
-			dev_err(dev, "failed to request MSI irq\n");
 			goto err_init_irq;
 		}
 	}
