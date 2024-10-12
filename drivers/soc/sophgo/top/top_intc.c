@@ -138,8 +138,9 @@ static int top_intc_domain_alloc(struct irq_domain *domain,
 		data->tic_to_plic[hwirq] = data->plic_hwirqs[hwirq];
 	}
 
-	pr_debug("%s hwirq %ld, irq %d, plic irq %d, total %d\n", __func__,
+	pr_info("----> %s hwirq %ld, irq %d, plic irq %d, total %d\n", __func__,
 		hwirq, virq, data->plic_irqs[hwirq], nr_irqs);
+	dump_stack();
 	return 0;
 }
 

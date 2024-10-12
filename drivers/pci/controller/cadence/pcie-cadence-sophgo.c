@@ -21,7 +21,6 @@
 #include <linux/of_irq.h>
 
 #include "pcie-cadence.h"
-#include "pcie-cadence-sophgo.h"
 
 #define MAX_MSI_IRQS			512
 #define MAX_MSI_IRQS_PER_CTRL		1
@@ -54,20 +53,6 @@ struct sg2042_pcie {
 	u16			link_id;
 	u32			top_intc_used;
 
-	// msix_supported 用于决定 当 top_intc_used = 1 时是否支持 msix，
-	// dts 配置如下：
-	// 第一个 slot 使用 top-intc，也支持 msix
-	// 第二个 slot 不使用 top-intc, 所以也没有配置 msix
-	// 第三个 slot 使用 top-intc，不支持 msix
-	// 在 cdns_pcie_msi_setup_for_top_intc 中区分 pci_msi_create_irq_domain 传入的 MSI domain info
-	// 也就是说这个标志会影响 msi_domain 的创建
-	// FIXME: 决定是否支持 msix, 关键是设置 msi_domain_info 结构体的 flags 属性时
-	// 是否添加 MSI_FLAG_PCI_MSIX 选项。一旦加上该选项，则 RC 将对支持 MSI-X
-	// 的设备优先使用 msi-x 中断。这会导致一些使用大量 msi-x 中断的设备在上电
-	// 时申请过多的中断导致超出 top-intc 的能力（最大 32 个中断）而失败。所以
-	// 在 upstream 时，我们按照最低能力级别对 RC 进行配置，即只支持单中断方式
-	// 的 MSI 方式。所以这个配置选项可以删掉。
-	u32			msix_supported;
 	// 用于存放 pci_msi_create_irq_domain 的结果
 	// 这个变量对于使用或者于不使用 top-intc 的情况都会用到
 	struct irq_domain	*msi_domain;
@@ -172,50 +157,6 @@ static int cdns_pcie_msi_init(struct sg2042_pcie *pcie)
 //////////////////////////////////////////////////////////////////
 // mango 私有逻辑，需要保留
 
-// FIXME：有关 check_vendor_id 我发现 a42bea5b2840bf1e33aafa4158d26c064227dfe8
-// 这个 commit 里 sophgo 塞了一些东西在内核里（除了驱动和 dts 之外的部分），
-// 这些东西无法 upstream， 需要拿掉
-// 这个补丁的目的是针对 top-intc 方式下，如果 msix_supported 为 1 时，我们还可以
-// 通过第二级白名单控制是否指定给一些特定的 pcie 设备启用 MSIX。
-// 此外该补丁还修改了一些支持 MSI-X 的 pcie 设备的最大支持的 MSI-X 中断的个数。
-// 该补丁移除后，结合针对 msix_supported 我们只支持 0，即不开 MSIX，所以 upstream
-// 的代码将默认只支持单中断的 MSI 方式，应该不受影响。
-struct vendor_id_list vendor_id_list[] = {
-	{"Inter X520", 0x8086, 0x10fb},
-	{"Inter I40E", 0x8086, 0x1572},
-	//{"WangXun RP1000", 0x8088},
-	{"Switchtec", 0x11f8,0x4052},
-	{"Mellanox ConnectX-2", 0x15b3, 0x6750}
-};
-
-size_t vendor_id_list_num = ARRAY_SIZE(vendor_id_list);
-
-int check_vendor_id(struct pci_dev *dev, struct vendor_id_list vendor_id_list[],
-			size_t vendor_id_list_num)
-{
-	uint16_t device_vendor_id;
-	uint16_t device_id;
-
-	if (pci_read_config_word(dev, PCI_VENDOR_ID, &device_vendor_id) != 0) {
-		pr_err("Failed to read device vendor ID\n");
-		return 0;
-	}
-
-	if (pci_read_config_word(dev, PCI_DEVICE_ID, &device_id) != 0) {
-		pr_err("Failed to read device vendor ID\n");
-		return 0;
-	}
-
-	for (int i = 0; i < vendor_id_list_num; ++i) {
-		if (device_vendor_id == vendor_id_list[i].vendor_id && device_id == vendor_id_list[i].device_id) {
-			pr_info("dev: %s vendor ID: 0x%04x device ID: 0x%04x Enable MSI-X IRQ\n",
-				vendor_id_list[i].name, device_vendor_id, device_id);
-			return 1;
-		}
-	}
-	return 0;
-}
-
 static void cdns_pcie_msi_ack_irq(struct irq_data *d)
 {
 	irq_chip_ack_parent(d);
@@ -243,12 +184,6 @@ static struct irq_chip cdns_pcie_msi_irq_chip = {
 // 这个不是只针对 top-intc, pcie-intc 也会用到。
 static struct msi_domain_info cdns_pcie_msi_domain_info = {
 	.flags	= (MSI_FLAG_USE_DEF_DOM_OPS | MSI_FLAG_USE_DEF_CHIP_OPS),
-	.chip	= &cdns_pcie_msi_irq_chip,
-};
-
-static struct msi_domain_info cdns_pcie_top_intr_msi_domain_info = {
-	.flags	= (MSI_FLAG_USE_DEF_DOM_OPS | MSI_FLAG_USE_DEF_CHIP_OPS
-		   | MSI_FLAG_PCI_MSIX),
 	.chip	= &cdns_pcie_msi_irq_chip,
 };
 
@@ -287,15 +222,9 @@ static int cdns_pcie_msi_setup_for_top_intc(struct sg2042_pcie *pcie, int intc_i
 	struct fwnode_handle *fwnode = of_node_to_fwnode(dev->of_node);
 	struct irq_domain *irq_parent = get_irq_domain(dev);
 
-	if (pcie->msix_supported == 1) {
-		pcie->msi_domain = pci_msi_create_irq_domain(fwnode,
-							   &cdns_pcie_top_intr_msi_domain_info,
-							   irq_parent);
-	} else {
-		pcie->msi_domain = pci_msi_create_irq_domain(fwnode,
-							   &cdns_pcie_msi_domain_info,
-							   irq_parent);
-	}
+	pcie->msi_domain = pci_msi_create_irq_domain(fwnode,
+						   &cdns_pcie_msi_domain_info,
+						   irq_parent);
 
 	if (!pcie->msi_domain) {
 		dev_err(dev, "create msi irq domain failed\n");
@@ -685,9 +614,6 @@ static int sg2042_pcie_host_probe(struct platform_device *pdev)
 
 	pcie->link_id = 0xffff;
 	of_property_read_u16(np, "link-id", &pcie->link_id);
-
-	pcie->msix_supported = 0;
-	of_property_read_u32(np, "msix-supported", &pcie->msix_supported);
 
 	pcie->top_intc_used = 0;
 	of_property_read_u32(np, "top-intc-used", &pcie->top_intc_used);
