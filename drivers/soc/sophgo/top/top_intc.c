@@ -90,9 +90,11 @@ static int top_intc_domain_alloc(struct irq_domain *domain,
 		// FIXME: 有关 patch ef5284bdc610f6f4a8fb7232b04f46aa962cb12b
 		// 这个补丁需要去掉，无法 upstream
 		if (msi_arg->flags & MSI_ALLOC_FLAGS_MSIX_ENABLED) {
+			pr_info("----> bitmap_find_free_region_offset\n");
 			ret = bitmap_find_free_region_offset(data->irq_bitmap, data->irq_num,
 						order_base_2(nr_irqs), MSIX_IRQ_OFFSET);
 		} else {
+			pr_info("----> bitmap_find_free_region\n");
 			ret = bitmap_find_free_region(data->irq_bitmap, data->irq_num,
 						order_base_2(nr_irqs));
 		}
