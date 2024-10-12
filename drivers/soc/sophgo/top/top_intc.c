@@ -13,11 +13,6 @@
 
 #define MAX_IRQ_NUMBER 32
 #define TOP_INTC_NUM 2
-// FIXME: patch ef5284bdc610f6f4a8fb7232b04f46aa962cb12b, 需要去掉，无法 upstream
-// 该补丁的目的是为了在同时支持采用 MSI 和 MSIX 中断分配的多个设备时，对我们 32 个
-// 中断号的分配进行分段管理，控制分别分给 MSI 和 MSIX 的中断的范围。默认分给 MSI-X 的是
-// [14: 31], 也就是 MSIX 18 个，比 MSI 多一些，这个值可以自己调整。
-#define MSIX_IRQ_OFFSET 14
 /*
  * here we assume all plic hwirq and tic hwirq should
  * be contiguous.
@@ -78,24 +73,15 @@ static int top_intc_domain_alloc(struct irq_domain *domain,
 				void *args)
 {
 	unsigned long flags;
-	msi_alloc_info_t * msi_arg;
 	irq_hw_number_t hwirq;
 	int i, type, ret = -1;
 	struct top_intc_data *data = domain->host_data;
 
 	if (data->for_msi) {
 		// dynamically alloc hwirq
-		msi_arg = (msi_alloc_info_t *)args;
 		spin_lock_irqsave(&data->lock, flags);
-		// FIXME: 有关 patch ef5284bdc610f6f4a8fb7232b04f46aa962cb12b
-		// 这个补丁需要去掉，无法 upstream
-		if (msi_arg->flags & MSI_ALLOC_FLAGS_MSIX_ENABLED) {
-			ret = bitmap_find_free_region_offset(data->irq_bitmap, data->irq_num,
-						order_base_2(nr_irqs), MSIX_IRQ_OFFSET);
-		} else {
-			ret = bitmap_find_free_region(data->irq_bitmap, data->irq_num,
+		ret = bitmap_find_free_region(data->irq_bitmap, data->irq_num,
 						order_base_2(nr_irqs));
-		}
 
 		spin_unlock_irqrestore(&data->lock, flags);
 
