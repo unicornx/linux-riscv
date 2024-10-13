@@ -65,7 +65,6 @@ struct sg2042_pcie {
 	struct irq_chip		*msi_irq_chip;
 	u32			num_vectors; // FIXME: 这个成员感觉用处不大。初始化为 MSI_DEF_NUM_VECTORS 就不变的。
 	u32			num_applied_vecs; // FIXME：增加这个成员的作用是为了代码优化，避免每次都要循环 512。可能改个名字会更好，仅仅是为了优化。
-	u32			irq_mask[MAX_MSI_CTRLS]; // FIXME 这个没用上，可以删掉
 	raw_spinlock_t		lock;
 	DECLARE_BITMAP(msi_irq_in_use, MAX_MSI_IRQS);
 	struct regmap		*syscon;
