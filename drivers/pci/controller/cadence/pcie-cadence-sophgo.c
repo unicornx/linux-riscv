@@ -474,6 +474,7 @@ static int sg2042_pcie_setup_msi(struct sg2042_pcie *pcie, struct platform_devic
 	return 0;
 }
 
+// FIMXE: what's this?
 static u64 sg2042_pcie_cpu_addr_fixup(struct cdns_pcie *pcie, u64 cpu_addr)
 {
 	return cpu_addr & CDNS_PLAT_CPU_TO_BUS_ADDR;
