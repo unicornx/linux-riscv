@@ -115,12 +115,12 @@ static int cdns_pcie_msi_init(struct sg2042_pcie *pcie)
 //////////////////////////////////////////////////////////////////
 // mango 私有逻辑，需要保留
 
-static void cdns_pcie_msi_ack_irq(struct irq_data *d)
+static void sg2042_msi_ack_irq(struct irq_data *d)
 {
 	irq_chip_ack_parent(d);
 }
 
-static void cdns_pcie_msi_mask_irq(struct irq_data *d)
+static void sg2042_msi_mask_irq(struct irq_data *d)
 {
 	pci_msi_mask_irq(d);
 	irq_chip_mask_parent(d);
@@ -132,40 +132,39 @@ static void cdns_pcie_msi_unmask_irq(struct irq_data *d)
 	irq_chip_unmask_parent(d);
 }
 
-static struct irq_chip cdns_pcie_msi_irq_chip = {
+static struct irq_chip sg2042_pcie_msi_irq_chip = {
 	.name = "cdns-msi",
-	.irq_ack = cdns_pcie_msi_ack_irq,
-	.irq_mask = cdns_pcie_msi_mask_irq,
+	.irq_ack = sg2042_msi_ack_irq,
+	.irq_mask = sg2042_msi_mask_irq,
 	.irq_unmask = cdns_pcie_msi_unmask_irq,
 };
 
 static struct msi_domain_info cdns_pcie_msi_domain_info = {
 	.flags	= (MSI_FLAG_USE_DEF_DOM_OPS | MSI_FLAG_USE_DEF_CHIP_OPS),
-	.chip	= &cdns_pcie_msi_irq_chip,
+	.chip	= &sg2042_pcie_msi_irq_chip,
 };
 
-static struct irq_domain *get_irq_domain(struct device *dev)
+static struct irq_domain *sg2042_pcie_get_parent_irq_domain(struct device *dev)
 {
 	struct device_node *np = dev->of_node;
 	struct device_node *parent;
 	struct irq_domain *domain;
 
 	if (!of_find_property(np, "interrupt-parent", NULL)) {
-		pr_info("----> of_find_property failed!\n");
+		dev_err(dev, "Can't find interrupt-parent!\n");
 		return NULL;
 	}
 
 	parent = of_irq_find_parent(np);
 	if (!parent) {
-		pr_info("----> of_irq_find_parent failed!\n");
+		dev_err(dev, "Can't find parent node!\n");
 		return ERR_PTR(-ENXIO);
 	}
 
 	domain = irq_find_host(parent);
 	of_node_put(parent);
 	if (!domain) {
-		/* domain not registered yet */
-		pr_info("----> irq_find_host failed!\n");
+		dev_err(dev, "Can't find domain of interrupt-parent!\n");
 		return ERR_PTR(-EPROBE_DEFER);
 	}
 
@@ -173,15 +172,15 @@ static struct irq_domain *get_irq_domain(struct device *dev)
 }
 
 
-static int cdns_pcie_msi_setup_for_top_intc(struct sg2042_pcie *pcie)
+static int sg2042_pcie_setup_top_intc(struct sg2042_pcie *pcie)
 {
 	struct device *dev = pcie->cdns_pcie->dev;
 	struct fwnode_handle *fwnode = of_node_to_fwnode(dev->of_node);
-	struct irq_domain *irq_parent = get_irq_domain(dev);
+	struct irq_domain *irq_parent = sg2042_pcie_get_parent_irq_domain(dev);
 
 	pcie->msi_domain = pci_msi_create_irq_domain(fwnode,
-						   &cdns_pcie_msi_domain_info,
-						   irq_parent);
+						     &cdns_pcie_msi_domain_info,
+						     irq_parent);
 
 	if (!pcie->msi_domain) {
 		dev_err(dev, "create msi irq domain failed\n");
@@ -287,21 +286,21 @@ static void cdns_chained_msi_isr(struct irq_desc *desc)
 	chained_irq_exit(chip, desc);
 }
 
-static int cdns_pci_msi_set_affinity(struct irq_data *d,
-				   const struct cpumask *mask, bool force)
+static int sg2042_pcie_msi_set_affinity(struct irq_data *d,
+					const struct cpumask *mask, bool force)
 {
 	return -EINVAL;
 }
 
-static void cdns_pci_bottom_mask(struct irq_data *d)
+static void sg2042_pcie_bottom_mask(struct irq_data *d)
 {
 }
 
-static void cdns_pci_bottom_unmask(struct irq_data *d)
+static void sg2042_pcie_bottom_unmask(struct irq_data *d)
 {
 }
 
-static void cdns_pci_setup_msi_msg(struct irq_data *d, struct msi_msg *msg)
+static void sg2042_pcie_setup_msi_msg(struct irq_data *d, struct msi_msg *msg)
 {
 	struct sg2042_pcie *pcie = irq_data_get_irq_chip_data(d);
 	struct device *dev = pcie->cdns_pcie->dev;
@@ -319,30 +318,30 @@ static void cdns_pci_setup_msi_msg(struct irq_data *d, struct msi_msg *msg)
 		(int)d->hwirq, msg->address_hi, msg->address_lo);
 }
 
-static void cdns_pci_bottom_ack(struct irq_data *d)
+static void sg2042_pcie_bottom_ack(struct irq_data *d)
 {
 }
 
 // 这个也是参考的 drivers/pci/controller/dwc/pcie-designware-host.c
 // 中的 dw_pci_msi_bottom_irq_chip
 // FIXME: 大部分函数都没有实现，是否可以删掉？需要学习一下 irq_chip 的回调函数
-// cdns_pci_msi_bottom_irq_chip 会在 cdns_pcie_irq_domain_alloc 中
+// cdns_pci_msi_bottom_irq_chip 会在 sg2042_pcie_irq_domain_alloc 中
 // 也就是 irq_domain 的 .alloc 回调中传入 irq_domain_set_info
 static struct irq_chip cdns_pci_msi_bottom_irq_chip = {
 	.name = "CDNS-PCI-MSI",
-	.irq_ack = cdns_pci_bottom_ack,
-	.irq_compose_msi_msg = cdns_pci_setup_msi_msg,
-	.irq_set_affinity = cdns_pci_msi_set_affinity,
-	.irq_mask = cdns_pci_bottom_mask,
-	.irq_unmask = cdns_pci_bottom_unmask,
+	.irq_ack = sg2042_pcie_bottom_ack,
+	.irq_compose_msi_msg = sg2042_pcie_setup_msi_msg,
+	.irq_set_affinity = sg2042_pcie_msi_set_affinity,
+	.irq_mask = sg2042_pcie_bottom_mask,
+	.irq_unmask = sg2042_pcie_bottom_unmask,
 };
 
-// 以下的 cdns_pcie_msi_domain_ops 和 cdns_pcie_allocate_domains
+// 以下的 cdns_pcie_msi_domain_ops 和 sg2042_pcie_allocate_domains
 // 参考了 drivers/pci/controller/dwc/pcie-designware-host.c
 // 中的 dw_pcie_msi_domain_ops 和 dw_pcie_allocate_domains
-static int cdns_pcie_irq_domain_alloc(struct irq_domain *domain,
-				    unsigned int virq, unsigned int nr_irqs,
-				    void *args)
+static int sg2042_pcie_irq_domain_alloc(struct irq_domain *domain,
+					unsigned int virq, unsigned int nr_irqs,
+					void *args)
 {
 	struct sg2042_pcie *pcie = domain->host_data;
 	unsigned long flags;
@@ -368,8 +367,8 @@ static int cdns_pcie_irq_domain_alloc(struct irq_domain *domain,
 	return 0;
 }
 
-static void cdns_pcie_irq_domain_free(struct irq_domain *domain,
-				    unsigned int virq, unsigned int nr_irqs)
+static void sg2042_pcie_irq_domain_free(struct irq_domain *domain,
+					unsigned int virq, unsigned int nr_irqs)
 {
 	struct irq_data *d = irq_domain_get_irq_data(domain, virq);
 	struct sg2042_pcie *pcie = irq_data_get_irq_chip_data(d);
@@ -384,20 +383,20 @@ static void cdns_pcie_irq_domain_free(struct irq_domain *domain,
 }
 
 static const struct irq_domain_ops cdns_pcie_msi_domain_ops = {
-	.alloc	= cdns_pcie_irq_domain_alloc,
-	.free	= cdns_pcie_irq_domain_free,
+	.alloc	= sg2042_pcie_irq_domain_alloc,
+	.free	= sg2042_pcie_irq_domain_free,
 };
 
 // 这个函数参考了 drivers/pci/controller/dwc/pcie-designware-host.c
 // 中的 dw_pcie_allocate_domains
-static int cdns_pcie_allocate_domains(struct sg2042_pcie *pcie)
+static int sg2042_pcie_allocate_domains(struct sg2042_pcie *pcie)
 {
 	struct device *dev = pcie->cdns_pcie->dev;
 	struct fwnode_handle *fwnode = of_node_to_fwnode(dev->of_node);
 
 	// 创建 irq domain
 	// 这个 irq_domain 不仅在下面创建 msi irq domain 中作为 parent domain
-	// 而且在 cdns_handle_msi_irq/cdns_pcie_free_msi 中会被使用，free 中
+	// 而且在 cdns_handle_msi_irq/sg2042_pcie_free_msi 中会被使用，free 中
 	// 主要负责释放
 	pcie->irq_domain = irq_domain_create_linear(fwnode, pcie->num_vectors,
 					       &cdns_pcie_msi_domain_ops, pcie);
@@ -420,7 +419,7 @@ static int cdns_pcie_allocate_domains(struct sg2042_pcie *pcie)
 	return 0;
 }
 
-static void cdns_pcie_free_msi(struct sg2042_pcie *pcie)
+static void sg2042_pcie_free_msi(struct sg2042_pcie *pcie)
 {
 	struct device *dev = pcie->cdns_pcie->dev;
 
@@ -455,7 +454,7 @@ static int cdns_pcie_msi_setup(struct sg2042_pcie *pcie)
 		// 不过参考 drivers/pci/controller/dwc/pcie-designware-host.c 里还是存放了这个，看了一下也是感觉多余
 		pcie->msi_irq_chip = &cdns_pci_msi_bottom_irq_chip;
 
-		ret = cdns_pcie_allocate_domains(pcie);
+		ret = sg2042_pcie_allocate_domains(pcie);
 		if (ret)
 			return ret;
 
@@ -470,13 +469,13 @@ static int cdns_pcie_msi_setup(struct sg2042_pcie *pcie)
 //////////////////////////////////////////////////////////////////
 
 
-static u64 sg2042_cdns_cpu_addr_fixup(struct cdns_pcie *pcie, u64 cpu_addr)
+static u64 sg2042_pcie_cpu_addr_fixup(struct cdns_pcie *pcie, u64 cpu_addr)
 {
 	return cpu_addr & CDNS_PLAT_CPU_TO_BUS_ADDR;
 }
 
-static const struct cdns_pcie_ops sg2042_cdns_pcie_ops = {
-	.cpu_addr_fixup = sg2042_cdns_cpu_addr_fixup,
+static const struct cdns_pcie_ops sg2042_pcie_ops = {
+	.cpu_addr_fixup = sg2042_pcie_cpu_addr_fixup,
 };
 
 /*
@@ -486,8 +485,8 @@ static const struct cdns_pcie_ops sg2042_cdns_pcie_ops = {
  * directly use read should be fine.
  * The same is true for write.
  */
-static int sg2042_cdns_pcie_config_read(struct pci_bus *bus, unsigned int devfn,
-					int where, int size, u32 *value)
+static int sg2042_pcie_config_read(struct pci_bus *bus, unsigned int devfn,
+				   int where, int size, u32 *value)
 {
 	if (pci_is_root_bus(bus))
 		return pci_generic_config_read32(bus, devfn, where, size,
@@ -496,8 +495,8 @@ static int sg2042_cdns_pcie_config_read(struct pci_bus *bus, unsigned int devfn,
 	return pci_generic_config_read(bus, devfn, where, size, value);
 }
 
-static int sg2042_cdns_pcie_config_write(struct pci_bus *bus, unsigned int devfn,
-					 int where, int size, u32 value)
+static int sg2042_pcie_config_write(struct pci_bus *bus, unsigned int devfn,
+				    int where, int size, u32 value)
 {
 	if (pci_is_root_bus(bus))
 		return pci_generic_config_write32(bus, devfn, where, size,
@@ -508,8 +507,8 @@ static int sg2042_cdns_pcie_config_write(struct pci_bus *bus, unsigned int devfn
 
 static struct pci_ops sg2042_cdns_pcie_host_ops = {
 	.map_bus	= cdns_pci_map_bus,
-	.read		= sg2042_cdns_pcie_config_read,
-	.write		= sg2042_cdns_pcie_config_write,
+	.read		= sg2042_pcie_config_read,
+	.write		= sg2042_pcie_config_write,
 };
 
 static const struct of_device_id cdns_pcie_host_of_match[] = {
@@ -548,7 +547,7 @@ static int sg2042_pcie_host_probe(struct platform_device *pdev)
 
 	cdns_pcie = &rc->pcie;
 	cdns_pcie->dev = dev;
-	cdns_pcie->ops = &sg2042_cdns_pcie_ops;
+	cdns_pcie->ops = &sg2042_pcie_ops;
 	pcie->cdns_pcie = cdns_pcie;
 
 	np_syscon = of_parse_phandle(np, "pcie-syscon", 0);
@@ -605,7 +604,7 @@ static int sg2042_pcie_host_probe(struct platform_device *pdev)
 		if (ret < 0)
 			goto err_host_probe;
 	} else if (pcie->top_intc_used == 1) {
-		ret = cdns_pcie_msi_setup_for_top_intc(pcie);
+		ret = sg2042_pcie_setup_top_intc(pcie);
 		if (ret < 0)
 			goto err_host_probe;
 	}
@@ -626,7 +625,7 @@ static int sg2042_pcie_host_probe(struct platform_device *pdev)
  err_host_probe:
  err_init_irq:
 	if ((pcie->top_intc_used == 0) && pci_msi_enabled())
-		cdns_pcie_free_msi(pcie);
+		sg2042_pcie_free_msi(pcie);
 
  err_pcie_setup:
 	cdns_pcie_disable_phy(cdns_pcie);
