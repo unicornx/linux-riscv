@@ -70,48 +70,6 @@ struct sg2042_pcie {
 	struct regmap		*syscon;
 };
 
-// 用于 pcie-intc
-// 分配一块连续的内存用于存放 msi data, 然后将该内存的物理地址告诉 pcie-intc
-static int cdns_pcie_msi_init(struct sg2042_pcie *pcie)
-{
-	struct device *dev = pcie->cdns_pcie->dev;
-	u64 msi_target = 0;
-	u32 value = 0;
-
-	// support 512 msi vectors
-	pcie->msi_page = dma_alloc_coherent(dev, 2048, &pcie->msi_data,
-					  (GFP_KERNEL|GFP_DMA32|__GFP_ZERO));
-	if (pcie->msi_page == NULL)
-		return -1;
-
-	dev_info(dev, "msi_data is 0x%llx\n", pcie->msi_data);
-	msi_target = (u64)pcie->msi_data;
-	
-	if (pcie->link_id == 1) {
-		/* Program the msi_data */
-		regmap_write(pcie->syscon, CDNS_PCIE_IRS_REG0868,
-				 lower_32_bits(msi_target));
-		regmap_write(pcie->syscon, CDNS_PCIE_IRS_REG086C,
-				 upper_32_bits(msi_target));
-
-		regmap_read(pcie->syscon, CDNS_PCIE_IRS_REG080C, &value);
-		value = (value & 0xffff0000) | MAX_MSI_IRQS;
-		regmap_write(pcie->syscon, CDNS_PCIE_IRS_REG080C, value);
-	} else {
-		/* Program the msi_data */
-		regmap_write(pcie->syscon, CDNS_PCIE_IRS_REG0860,
-				 lower_32_bits(msi_target));
-		regmap_write(pcie->syscon, CDNS_PCIE_IRS_REG0864,
-				 upper_32_bits(msi_target));
-
-		regmap_read(pcie->syscon, CDNS_PCIE_IRS_REG085C, &value);
-		value = (value & 0x0000ffff) | (MAX_MSI_IRQS << 16);
-		regmap_write(pcie->syscon, CDNS_PCIE_IRS_REG085C, value);
-	}
-
-	return 0;
-}
-
 //////////////////////////////////////////////////////////////////
 // mango 私有逻辑，需要保留
 
@@ -126,24 +84,25 @@ static void sg2042_msi_mask_irq(struct irq_data *d)
 	irq_chip_mask_parent(d);
 }
 
-static void cdns_pcie_msi_unmask_irq(struct irq_data *d)
+static void sg2042_msi_unmask_irq(struct irq_data *d)
 {
 	pci_msi_unmask_irq(d);
 	irq_chip_unmask_parent(d);
 }
 
 static struct irq_chip sg2042_pcie_msi_irq_chip = {
-	.name = "cdns-msi",
+	.name = "PCI-MSI",
 	.irq_ack = sg2042_msi_ack_irq,
 	.irq_mask = sg2042_msi_mask_irq,
-	.irq_unmask = cdns_pcie_msi_unmask_irq,
+	.irq_unmask = sg2042_msi_unmask_irq,
 };
 
-static struct msi_domain_info cdns_pcie_msi_domain_info = {
+static struct msi_domain_info sg2042_pcie_msi_domain_info = {
 	.flags	= (MSI_FLAG_USE_DEF_DOM_OPS | MSI_FLAG_USE_DEF_CHIP_OPS),
 	.chip	= &sg2042_pcie_msi_irq_chip,
 };
 
+// top-intc
 static struct irq_domain *sg2042_pcie_get_parent_irq_domain(struct device *dev)
 {
 	struct device_node *np = dev->of_node;
@@ -165,7 +124,7 @@ static struct irq_domain *sg2042_pcie_get_parent_irq_domain(struct device *dev)
 	of_node_put(parent);
 	if (!domain) {
 		dev_err(dev, "Can't find domain of interrupt-parent!\n");
-		return ERR_PTR(-EPROBE_DEFER);
+		return ERR_PTR(-ENXIO);
 	}
 
 	return domain;
@@ -176,11 +135,11 @@ static int sg2042_pcie_setup_top_intc(struct sg2042_pcie *pcie)
 {
 	struct device *dev = pcie->cdns_pcie->dev;
 	struct fwnode_handle *fwnode = of_node_to_fwnode(dev->of_node);
-	struct irq_domain *irq_parent = sg2042_pcie_get_parent_irq_domain(dev);
+	struct irq_domain *parent_domain = sg2042_pcie_get_parent_irq_domain(dev);
 
 	pcie->msi_domain = pci_msi_create_irq_domain(fwnode,
-						     &cdns_pcie_msi_domain_info,
-						     irq_parent);
+						     &sg2042_pcie_msi_domain_info,
+						     parent_domain);
 
 	if (!pcie->msi_domain) {
 		dev_err(dev, "create msi irq domain failed\n");
@@ -191,8 +150,6 @@ static int sg2042_pcie_setup_top_intc(struct sg2042_pcie *pcie)
 }
 
 // pcie-intc
-// 
-/* MSI int handler */
 static irqreturn_t cdns_handle_msi_irq(struct sg2042_pcie *pcie)
 {
 	u32 i, pos, irq;
@@ -325,10 +282,10 @@ static void sg2042_pcie_bottom_ack(struct irq_data *d)
 // 这个也是参考的 drivers/pci/controller/dwc/pcie-designware-host.c
 // 中的 dw_pci_msi_bottom_irq_chip
 // FIXME: 大部分函数都没有实现，是否可以删掉？需要学习一下 irq_chip 的回调函数
-// cdns_pci_msi_bottom_irq_chip 会在 sg2042_pcie_irq_domain_alloc 中
+// sg2042_pcie_msi_bottom_irq_chip 会在 sg2042_pcie_irq_domain_alloc 中
 // 也就是 irq_domain 的 .alloc 回调中传入 irq_domain_set_info
-static struct irq_chip cdns_pci_msi_bottom_irq_chip = {
-	.name = "CDNS-PCI-MSI",
+static struct irq_chip sg2042_pcie_msi_bottom_irq_chip = {
+	.name = "SG2042-PCI-MSI",
 	.irq_ack = sg2042_pcie_bottom_ack,
 	.irq_compose_msi_msg = sg2042_pcie_setup_msi_msg,
 	.irq_set_affinity = sg2042_pcie_msi_set_affinity,
@@ -336,7 +293,7 @@ static struct irq_chip cdns_pci_msi_bottom_irq_chip = {
 	.irq_unmask = sg2042_pcie_bottom_unmask,
 };
 
-// 以下的 cdns_pcie_msi_domain_ops 和 sg2042_pcie_allocate_domains
+// 以下的 sg2042_pcie_msi_domain_ops 和 sg2042_pcie_allocate_domains
 // 参考了 drivers/pci/controller/dwc/pcie-designware-host.c
 // 中的 dw_pcie_msi_domain_ops 和 dw_pcie_allocate_domains
 static int sg2042_pcie_irq_domain_alloc(struct irq_domain *domain,
@@ -382,7 +339,7 @@ static void sg2042_pcie_irq_domain_free(struct irq_domain *domain,
 	raw_spin_unlock_irqrestore(&pcie->lock, flags);
 }
 
-static const struct irq_domain_ops cdns_pcie_msi_domain_ops = {
+static const struct irq_domain_ops sg2042_pcie_msi_domain_ops = {
 	.alloc	= sg2042_pcie_irq_domain_alloc,
 	.free	= sg2042_pcie_irq_domain_free,
 };
@@ -399,7 +356,8 @@ static int sg2042_pcie_allocate_domains(struct sg2042_pcie *pcie)
 	// 而且在 cdns_handle_msi_irq/sg2042_pcie_free_msi 中会被使用，free 中
 	// 主要负责释放
 	pcie->irq_domain = irq_domain_create_linear(fwnode, pcie->num_vectors,
-					       &cdns_pcie_msi_domain_ops, pcie);
+						    &sg2042_pcie_msi_domain_ops,
+						    pcie);
 	if (!pcie->irq_domain) {
 		dev_err(dev, "Failed to create IRQ domain\n");
 		return -ENOMEM;
@@ -408,8 +366,8 @@ static int sg2042_pcie_allocate_domains(struct sg2042_pcie *pcie)
 	irq_domain_update_bus_token(pcie->irq_domain, DOMAIN_BUS_NEXUS);
 
 	pcie->msi_domain = pci_msi_create_irq_domain(fwnode,
-						   &cdns_pcie_msi_domain_info,
-						   pcie->irq_domain);
+						     &sg2042_pcie_msi_domain_info,
+						     pcie->irq_domain);
 	if (!pcie->msi_domain) {
 		dev_err(dev, "Failed to create MSI domain\n");
 		irq_domain_remove(pcie->irq_domain);
@@ -436,33 +394,87 @@ static void sg2042_pcie_free_msi(struct sg2042_pcie *pcie)
 
 }
 
-// 用于 pcie-intc
-// 在 cdns_pcie_msi_init 后对中断做进一步初始化，FIXME，是否可以和 cdns_pcie_msi_init 合并？
-static int cdns_pcie_msi_setup(struct sg2042_pcie *pcie)
+// 分配一块连续的内存用于存放 msi data, 然后将该内存的物理地址告诉 pcie-intc
+static int cdns_pcie_msi_init(struct sg2042_pcie *pcie)
 {
+	struct device *dev = pcie->cdns_pcie->dev;
+	u64 msi_target = 0;
+	u32 value = 0;
+
+	// support 512 msi vectors
+	pcie->msi_page = dma_alloc_coherent(dev, 2048, &pcie->msi_data,
+					  (GFP_KERNEL|GFP_DMA32|__GFP_ZERO));
+	if (pcie->msi_page == NULL)
+		return -1;
+
+	dev_info(dev, "msi_data is 0x%llx\n", pcie->msi_data);
+	msi_target = (u64)pcie->msi_data;
+
+	if (pcie->link_id == 1) {
+		/* Program the msi_data */
+		regmap_write(pcie->syscon, CDNS_PCIE_IRS_REG0868,
+				 lower_32_bits(msi_target));
+		regmap_write(pcie->syscon, CDNS_PCIE_IRS_REG086C,
+				 upper_32_bits(msi_target));
+
+		regmap_read(pcie->syscon, CDNS_PCIE_IRS_REG080C, &value);
+		value = (value & 0xffff0000) | MAX_MSI_IRQS;
+		regmap_write(pcie->syscon, CDNS_PCIE_IRS_REG080C, value);
+	} else {
+		/* Program the msi_data */
+		regmap_write(pcie->syscon, CDNS_PCIE_IRS_REG0860,
+				 lower_32_bits(msi_target));
+		regmap_write(pcie->syscon, CDNS_PCIE_IRS_REG0864,
+				 upper_32_bits(msi_target));
+
+		regmap_read(pcie->syscon, CDNS_PCIE_IRS_REG085C, &value);
+		value = (value & 0x0000ffff) | (MAX_MSI_IRQS << 16);
+		regmap_write(pcie->syscon, CDNS_PCIE_IRS_REG085C, value);
+	}
+
+	return 0;
+}
+
+static int sg2042_pcie_setup_msi(struct sg2042_pcie *pcie, struct platform_device *pdev)
+{
+	struct device *dev = pcie->cdns_pcie->dev;
 	int ret = 0;
+
+	pcie->num_vectors = MSI_DEF_NUM_VECTORS;
+	pcie->num_applied_vecs = 0; // FIXME. 可以省略，默认为 zero
+
+	ret = cdns_pcie_msi_init(pcie);
+	if (ret) {
+		dev_err(dev, "cdns_pcie_msi_init() failed\n");
+		return ret;
+	}
+
+	ret = platform_get_irq_byname(pdev, "msi");
+	if (ret <= 0) {
+		dev_err(dev, "failed to get MSI irq\n");
+		return ret;
+	}
+	pcie->msi_irq = ret;
 
 	// 初始化一把 lock，这把锁会用于 bitmap_find_free_region/bitmap_release_region
 	// FIMXE? why 需要这把锁？
 	raw_spin_lock_init(&pcie->lock);
 
-	if (IS_ENABLED(CONFIG_PCI_MSI)) { // FIXME，这些判断分散在各处，最好统一处理，结合相关函数的优化整合
-		// FIXME，这个逻辑感觉是多余的，从原代码的逻辑看，这里保存了 cdns_pci_msi_bottom_irq_chip
-		// 的地址，然后在 cdns_pcie_irq_domain_alloc 中调用 irq_domain_set_info
-		// 的时候使用，但是 cdns_pci_msi_bottom_irq_chip 本身是全局变量
-		// 在 irq_domain_set_info 使用的时候直接引用就好了，不需要转一下。
-		// 不过参考 drivers/pci/controller/dwc/pcie-designware-host.c 里还是存放了这个，看了一下也是感觉多余
-		pcie->msi_irq_chip = &cdns_pci_msi_bottom_irq_chip;
+	// FIXME，这个逻辑感觉是多余的，从原代码的逻辑看，这里保存了 sg2042_pcie_msi_bottom_irq_chip
+	// 的地址，然后在 sg2042_pcie_irq_domain_alloc 中调用 irq_domain_set_info
+	// 的时候使用，但是 sg2042_pcie_msi_bottom_irq_chip 本身是全局变量
+	// 在 irq_domain_set_info 使用的时候直接引用就好了，不需要转一下。
+	// 不过参考 drivers/pci/controller/dwc/pcie-designware-host.c 里还是存放了这个，看了一下也是感觉多余
+	pcie->msi_irq_chip = &sg2042_pcie_msi_bottom_irq_chip;
 
-		ret = sg2042_pcie_allocate_domains(pcie);
-		if (ret)
-			return ret;
+	ret = sg2042_pcie_allocate_domains(pcie);
+	if (ret)
+		return ret;
 
-		if (pcie->msi_irq)
-			irq_set_chained_handler_and_data(pcie->msi_irq, cdns_chained_msi_isr, pcie);
-	}
+	if (pcie->msi_irq)
+		irq_set_chained_handler_and_data(pcie->msi_irq, cdns_chained_msi_isr, pcie);
 
-	return ret;
+	return 0;
 }
 
 // mango 私有逻辑，需要保留
@@ -505,7 +517,7 @@ static int sg2042_pcie_config_write(struct pci_bus *bus, unsigned int devfn,
 	return pci_generic_config_write(bus, devfn, where, size, value);
 }
 
-static struct pci_ops sg2042_cdns_pcie_host_ops = {
+static struct pci_ops sg2042_pcie_host_ops = {
 	.map_bus	= cdns_pci_map_bus,
 	.read		= sg2042_pcie_config_read,
 	.write		= sg2042_pcie_config_write,
@@ -542,7 +554,7 @@ static int sg2042_pcie_host_probe(struct platform_device *pdev)
 	bridge = devm_pci_alloc_host_bridge(dev, sizeof(*rc));
 	if (!bridge)
 		return -ENOMEM;
-	bridge->ops = &sg2042_cdns_pcie_host_ops;
+	bridge->ops = &sg2042_pcie_host_ops;
 	rc = pci_host_bridge_priv(bridge);
 
 	cdns_pcie = &rc->pcie;
@@ -579,34 +591,14 @@ static int sg2042_pcie_host_probe(struct platform_device *pdev)
 	// do sg2042 related initialization work
 	// FIXME: 下面这段逻辑是从原来的 cdns_pcie_host_init 里挪出来的
 	// 但是感觉也可以和下面一段逻辑合并，都是处理 pcie-intc 的情况
-	if (pcie->top_intc_used == 0) {
-		pcie->num_vectors = MSI_DEF_NUM_VECTORS;
-		pcie->num_applied_vecs = 0;
-		if (IS_ENABLED(CONFIG_PCI_MSI)) {
-			ret = cdns_pcie_msi_init(pcie);
-			if (ret) {
-				dev_err(dev, "cdns_pcie_msi_init() failed\n");
-				goto err_get_sync;
-			}
-		}
-	}
-
-	if ((pcie->top_intc_used == 0) && (IS_ENABLED(CONFIG_PCI_MSI))) {
-		pcie->msi_irq = platform_get_irq_byname(pdev, "msi");
-		if (pcie->msi_irq <= 0) {
-			dev_err(dev, "failed to get MSI irq\n");
-			goto err_init_irq;
-		}
-	}
-
-	if (pcie->top_intc_used == 0) {
-		ret = cdns_pcie_msi_setup(pcie);
-		if (ret < 0)
-			goto err_host_probe;
-	} else if (pcie->top_intc_used == 1) {
+	if (pcie->top_intc_used == 1) {
 		ret = sg2042_pcie_setup_top_intc(pcie);
 		if (ret < 0)
-			goto err_host_probe;
+			goto err_pcie_setup;
+	} else {
+		ret = sg2042_pcie_setup_msi(pcie, pdev);
+		if (ret < 0)
+			goto err_sg2042_pcie_setup_msi;
 	}
 
 	ret = cdns_pcie_init_phy(dev, cdns_pcie);
@@ -622,10 +614,8 @@ static int sg2042_pcie_host_probe(struct platform_device *pdev)
 
 	return 0;
 
- err_host_probe:
- err_init_irq:
-	if ((pcie->top_intc_used == 0) && pci_msi_enabled())
-		sg2042_pcie_free_msi(pcie);
+ err_sg2042_pcie_setup_msi:
+	sg2042_pcie_free_msi(pcie);
 
  err_pcie_setup:
 	cdns_pcie_disable_phy(cdns_pcie);
