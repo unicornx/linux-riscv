@@ -612,6 +612,7 @@ err_get_sync:
 	return ret;
 }
 
+// FIXME：参考 dw 的做法，在 remove/shutdown 时还有很多需要清理
 static void cdns_pcie_shutdown(struct platform_device *pdev)
 {
 	struct sg2042_pcie *pcie = platform_get_drvdata(pdev);
