@@ -70,47 +70,6 @@ struct sg2042_pcie {
 	struct regmap		*syscon;
 };
 
-static u64 cdns_mango_cpu_addr_fixup(struct cdns_pcie *pcie, u64 cpu_addr)
-{
-	return cpu_addr & CDNS_PLAT_CPU_TO_BUS_ADDR;
-}
-
-static const struct cdns_pcie_ops cdns_mango_ops = {
-	.cpu_addr_fixup = cdns_mango_cpu_addr_fixup,
-};
-
-static int sg2042_cdns_pcie_config_read(struct pci_bus *bus, unsigned int devfn,
-				    int where, int size, u32 *value)
-{
-	if (pci_is_root_bus(bus))
-		return pci_generic_config_read32(bus, devfn, where, size,
-						 value);
-
-	return pci_generic_config_read(bus, devfn, where, size, value);
-}
-
-static int sg2042_cdns_pcie_config_write(struct pci_bus *bus, unsigned int devfn,
-				     int where, int size, u32 value)
-{
-	if (pci_is_root_bus(bus))
-		return pci_generic_config_write32(bus, devfn, where, size,
-						  value);
-
-	return pci_generic_config_write(bus, devfn, where, size, value);
-}
-
-static struct pci_ops cdns_pcie_host_ops = {
-	.map_bus	= cdns_pci_map_bus,
-	.read		= sg2042_cdns_pcie_config_read,
-	.write		= sg2042_cdns_pcie_config_write,
-};
-
-static const struct of_device_id cdns_pcie_host_of_match[] = {
-	{ .compatible = "sophgo,cdns-pcie-host" },
-
-	{ },
-};
-
 // 用于 pcie-intc
 // 分配一块连续的内存用于存放 msi data, 然后将该内存的物理地址告诉 pcie-intc
 static int cdns_pcie_msi_init(struct sg2042_pcie *pcie)
@@ -180,7 +139,6 @@ static struct irq_chip cdns_pcie_msi_irq_chip = {
 	.irq_unmask = cdns_pcie_msi_unmask_irq,
 };
 
-// 这个不是只针对 top-intc, pcie-intc 也会用到。
 static struct msi_domain_info cdns_pcie_msi_domain_info = {
 	.flags	= (MSI_FLAG_USE_DEF_DOM_OPS | MSI_FLAG_USE_DEF_CHIP_OPS),
 	.chip	= &cdns_pcie_msi_irq_chip,
@@ -511,11 +469,59 @@ static int cdns_pcie_msi_setup(struct sg2042_pcie *pcie)
 // mango 私有逻辑，需要保留
 //////////////////////////////////////////////////////////////////
 
+
+static u64 sg2042_cdns_cpu_addr_fixup(struct cdns_pcie *pcie, u64 cpu_addr)
+{
+	return cpu_addr & CDNS_PLAT_CPU_TO_BUS_ADDR;
+}
+
+static const struct cdns_pcie_ops sg2042_cdns_pcie_ops = {
+	.cpu_addr_fixup = sg2042_cdns_cpu_addr_fixup,
+};
+
+/*
+ * SG2042 only support 4-byte aligned access, so for the rootbus (i.e. to read
+ * the PCIe controller itself, read32 is required. For non-rootbus (i.e. to read
+ * the PCIe peripheral registers, supports 1/2/4 byte aligned access, so
+ * directly use read should be fine.
+ * The same is true for write.
+ */
+static int sg2042_cdns_pcie_config_read(struct pci_bus *bus, unsigned int devfn,
+					int where, int size, u32 *value)
+{
+	if (pci_is_root_bus(bus))
+		return pci_generic_config_read32(bus, devfn, where, size,
+						 value);
+
+	return pci_generic_config_read(bus, devfn, where, size, value);
+}
+
+static int sg2042_cdns_pcie_config_write(struct pci_bus *bus, unsigned int devfn,
+					 int where, int size, u32 value)
+{
+	if (pci_is_root_bus(bus))
+		return pci_generic_config_write32(bus, devfn, where, size,
+						  value);
+
+	return pci_generic_config_write(bus, devfn, where, size, value);
+}
+
+static struct pci_ops sg2042_cdns_pcie_host_ops = {
+	.map_bus	= cdns_pci_map_bus,
+	.read		= sg2042_cdns_pcie_config_read,
+	.write		= sg2042_cdns_pcie_config_write,
+};
+
+static const struct of_device_id cdns_pcie_host_of_match[] = {
+	{ .compatible = "sophgo,cdns-pcie-host" },
+	{},
+};
+
 static int sg2042_pcie_host_probe(struct platform_device *pdev)
 {
 	struct device *dev = &pdev->dev;
 	struct device_node *np = dev->of_node;
-	struct device_node *np_top;
+	struct device_node *np_syscon;
 	struct pci_host_bridge *bridge;
 
 	struct cdns_pcie *cdns_pcie;
@@ -537,24 +543,22 @@ static int sg2042_pcie_host_probe(struct platform_device *pdev)
 	bridge = devm_pci_alloc_host_bridge(dev, sizeof(*rc));
 	if (!bridge)
 		return -ENOMEM;
-	bridge->ops = &cdns_pcie_host_ops;
+	bridge->ops = &sg2042_cdns_pcie_host_ops;
 	rc = pci_host_bridge_priv(bridge);
 
 	cdns_pcie = &rc->pcie;
 	cdns_pcie->dev = dev;
-	cdns_pcie->ops = &cdns_mango_ops;
+	cdns_pcie->ops = &sg2042_cdns_pcie_ops;
 	pcie->cdns_pcie = cdns_pcie;
 
-	////////////////////////////////////////////////////////////
-	// parse dts for sg2042
-	np_top = of_parse_phandle(np, "pcie-syscon", 0);
-	if (!np_top) {
-		dev_err(dev, "%s can't get pcie-syscon node\n", __func__);
+	np_syscon = of_parse_phandle(np, "pcie-syscon", 0);
+	if (!np_syscon) {
+		dev_err(dev, "Failed to get pcie-syscon node\n");
 		return -ENOMEM;
 	}
-	syscon = syscon_node_to_regmap(np_top);
+	syscon = syscon_node_to_regmap(np_syscon);
 	if (IS_ERR(syscon)) {
-		dev_err(dev, "cannot get regmap\n");
+		dev_err(dev, "Failed to get regmap for pcie-syscon\n");
 		return -ENOMEM;
 	}
 	pcie->syscon = syscon;
@@ -568,7 +572,7 @@ static int sg2042_pcie_host_probe(struct platform_device *pdev)
 	pm_runtime_enable(dev);
 	ret = pm_runtime_get_sync(dev);
 	if (ret < 0) {
-		dev_err(dev, "pm_runtime_get_sync() failed\n");
+		dev_err(dev, "pm_runtime_get_sync failed\n");
 		goto err_get_sync;
 	}
 
