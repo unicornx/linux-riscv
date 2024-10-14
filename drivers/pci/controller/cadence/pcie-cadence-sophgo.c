@@ -6,19 +6,18 @@
  * Copyright (C) 2024 Chen Wang <unicorn_wang@outlook.com>
  */
 
-#include <linux/kernel.h>
-#include <linux/of_address.h>
-#include <linux/of_pci.h>
-#include <linux/msi.h>
 #include <linux/irq.h>
-#include <linux/irqdomain.h>
 #include <linux/irqchip/chained_irq.h>
+#include <linux/irqdomain.h>
+#include <linux/kernel.h>
+#include <linux/mfd/syscon.h>
+#include <linux/msi.h>
+#include <linux/of_address.h>
+#include <linux/of_irq.h>
+#include <linux/of_pci.h>
 #include <linux/platform_device.h>
 #include <linux/pm_runtime.h>
-#include <linux/mfd/syscon.h>
 #include <linux/regmap.h>
-
-#include <linux/of_irq.h>
 
 #include "pcie-cadence.h"
 
@@ -69,9 +68,6 @@ struct sg2042_pcie {
 	DECLARE_BITMAP(msi_irq_in_use, MAX_MSI_IRQS);
 	struct regmap		*syscon;
 };
-
-//////////////////////////////////////////////////////////////////
-// mango 私有逻辑，需要保留
 
 static void sg2042_msi_ack_irq(struct irq_data *d)
 {
@@ -150,7 +146,7 @@ static int sg2042_pcie_setup_top_intc(struct sg2042_pcie *pcie)
 }
 
 // pcie-intc
-static irqreturn_t cdns_handle_msi_irq(struct sg2042_pcie *pcie)
+static irqreturn_t sg2042_pcie_handle_msi_irq(struct sg2042_pcie *pcie)
 {
 	u32 i, pos, irq;
 	unsigned long val;
@@ -197,9 +193,9 @@ static irqreturn_t cdns_handle_msi_irq(struct sg2042_pcie *pcie)
 
 // pcie-intc
 // msi 逻辑会走到这里
-// 核心是调用的 cdns_handle_msi_irq
+// 核心是调用的 sg2042_pcie_handle_msi_irq
 /* Chained MSI interrupt service routine */
-static void cdns_chained_msi_isr(struct irq_desc *desc)
+static void sg2042_pcie_chained_msi_isr(struct irq_desc *desc)
 {
 	struct irq_chip *chip = irq_desc_get_chip(desc);
 	struct sg2042_pcie *pcie;
@@ -237,7 +233,7 @@ static void cdns_chained_msi_isr(struct irq_desc *desc)
 		// 但和硬件确认后，清中断只是将 status 标志恢复为 0，但 MSI data 
 		// 的写入操作和中断上报完全是异步的，RC 一旦收到 EP 的 MSI 通知
 		// 就会对 msi data 内存区进行写，和 cpu 这边是否去 clear 并无关系。
-		cdns_handle_msi_irq(pcie);
+		sg2042_pcie_handle_msi_irq(pcie);
 	}
 
 	chained_irq_exit(chip, desc);
@@ -353,7 +349,7 @@ static int sg2042_pcie_allocate_domains(struct sg2042_pcie *pcie)
 
 	// 创建 irq domain
 	// 这个 irq_domain 不仅在下面创建 msi irq domain 中作为 parent domain
-	// 而且在 cdns_handle_msi_irq/sg2042_pcie_free_msi 中会被使用，free 中
+	// 而且在 sg2042_pcie_handle_msi_irq/sg2042_pcie_free_msi 中会被使用，free 中
 	// 主要负责释放
 	pcie->irq_domain = irq_domain_create_linear(fwnode, pcie->num_vectors,
 						    &sg2042_pcie_msi_domain_ops,
@@ -395,7 +391,7 @@ static void sg2042_pcie_free_msi(struct sg2042_pcie *pcie)
 }
 
 // 分配一块连续的内存用于存放 msi data, 然后将该内存的物理地址告诉 pcie-intc
-static int cdns_pcie_msi_init(struct sg2042_pcie *pcie)
+static int sg2042_pcie_msi_init(struct sg2042_pcie *pcie)
 {
 	struct device *dev = pcie->cdns_pcie->dev;
 	u64 msi_target = 0;
@@ -443,9 +439,9 @@ static int sg2042_pcie_setup_msi(struct sg2042_pcie *pcie, struct platform_devic
 	pcie->num_vectors = MSI_DEF_NUM_VECTORS;
 	pcie->num_applied_vecs = 0; // FIXME. 可以省略，默认为 zero
 
-	ret = cdns_pcie_msi_init(pcie);
+	ret = sg2042_pcie_msi_init(pcie);
 	if (ret) {
-		dev_err(dev, "cdns_pcie_msi_init() failed\n");
+		dev_err(dev, "Failed to initialize msi!\n");
 		return ret;
 	}
 
@@ -472,14 +468,11 @@ static int sg2042_pcie_setup_msi(struct sg2042_pcie *pcie, struct platform_devic
 		return ret;
 
 	if (pcie->msi_irq)
-		irq_set_chained_handler_and_data(pcie->msi_irq, cdns_chained_msi_isr, pcie);
+		irq_set_chained_handler_and_data(pcie->msi_irq,
+						 sg2042_pcie_chained_msi_isr, pcie);
 
 	return 0;
 }
-
-// mango 私有逻辑，需要保留
-//////////////////////////////////////////////////////////////////
-
 
 static u64 sg2042_pcie_cpu_addr_fixup(struct cdns_pcie *pcie, u64 cpu_addr)
 {
@@ -523,7 +516,7 @@ static struct pci_ops sg2042_pcie_host_ops = {
 	.write		= sg2042_pcie_config_write,
 };
 
-static const struct of_device_id cdns_pcie_host_of_match[] = {
+static const struct of_device_id sg2042_pcie_of_match[] = {
 	{ .compatible = "sophgo,cdns-pcie-host" },
 	{},
 };
@@ -532,17 +525,13 @@ static int sg2042_pcie_host_probe(struct platform_device *pdev)
 {
 	struct device *dev = &pdev->dev;
 	struct device_node *np = dev->of_node;
-	struct device_node *np_syscon;
 	struct pci_host_bridge *bridge;
-
+	struct device_node *np_syscon;
 	struct cdns_pcie *cdns_pcie;
 	struct sg2042_pcie *pcie;
-
-	struct cdns_pcie_rc *rc = NULL;
-
-	int ret;
-
+	struct cdns_pcie_rc *rc;
 	struct regmap *syscon;
+	int ret;
 
 	pcie = devm_kzalloc(dev, sizeof(*pcie), GFP_KERNEL);
 	if (!pcie)
@@ -587,10 +576,6 @@ static int sg2042_pcie_host_probe(struct platform_device *pdev)
 		goto err_get_sync;
 	}
 
-	////////////////////////////////////////////////////////////
-	// do sg2042 related initialization work
-	// FIXME: 下面这段逻辑是从原来的 cdns_pcie_host_init 里挪出来的
-	// 但是感觉也可以和下面一段逻辑合并，都是处理 pcie-intc 的情况
 	if (pcie->top_intc_used == 1) {
 		ret = sg2042_pcie_setup_top_intc(pcie);
 		if (ret < 0)
@@ -641,8 +626,8 @@ static void cdns_pcie_shutdown(struct platform_device *pdev)
 static struct platform_driver cdns_pcie_host_driver = {
 	.driver = {
 		.name = "cdns-pcie-host",
-		.of_match_table = cdns_pcie_host_of_match,
-		.pm	= &cdns_pcie_pm_ops,
+		.of_match_table = sg2042_pcie_of_match,
+		.pm = &cdns_pcie_pm_ops,
 	},
 	.probe = sg2042_pcie_host_probe,
 	.shutdown = cdns_pcie_shutdown,
