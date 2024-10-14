@@ -49,8 +49,8 @@ struct sg2042_pcie {
 	struct cdns_pcie	*cdns_pcie;
 
 	// Fully private members for sg2042
-	u16			pcie_id; // FIXME dts 设置了，但是代码中用不到
-	u16			link_id;
+	u32			pcie_id; // FIXME dts 设置了，但是代码中用不到
+	u32			link_id;
 	u32			top_intc_used;
 
 	// 用于存放 pci_msi_create_irq_domain 的结果
@@ -215,7 +215,7 @@ static struct irq_domain *get_irq_domain(struct device *dev)
 }
 
 
-static int cdns_pcie_msi_setup_for_top_intc(struct sg2042_pcie *pcie, int intc_id)
+static int cdns_pcie_msi_setup_for_top_intc(struct sg2042_pcie *pcie)
 {
 	struct device *dev = pcie->cdns_pcie->dev;
 	struct fwnode_handle *fwnode = of_node_to_fwnode(dev->of_node);
@@ -524,7 +524,6 @@ static int sg2042_pcie_host_probe(struct platform_device *pdev)
 	struct cdns_pcie_rc *rc = NULL;
 
 	int ret;
-	int top_intc_id = -1;
 
 	struct regmap *syscon;
 
@@ -560,16 +559,9 @@ static int sg2042_pcie_host_probe(struct platform_device *pdev)
 	}
 	pcie->syscon = syscon;
 
-	pcie->pcie_id = 0xffff;
-	of_property_read_u16(np, "pcie-id", &pcie->pcie_id);
-
-	pcie->link_id = 0xffff;
-	of_property_read_u16(np, "link-id", &pcie->link_id);
-
-	pcie->top_intc_used = 0;
+	of_property_read_u32(np, "pcie-id", &pcie->pcie_id);
+	of_property_read_u32(np, "link-id", &pcie->link_id);
 	of_property_read_u32(np, "top-intc-used", &pcie->top_intc_used);
-	if (pcie->top_intc_used == 1)
-		of_property_read_u32(np, "top-intc-id", &top_intc_id);
 
 	platform_set_drvdata(pdev, pcie);
 
@@ -609,7 +601,7 @@ static int sg2042_pcie_host_probe(struct platform_device *pdev)
 		if (ret < 0)
 			goto err_host_probe;
 	} else if (pcie->top_intc_used == 1) {
-		ret = cdns_pcie_msi_setup_for_top_intc(pcie, top_intc_id);
+		ret = cdns_pcie_msi_setup_for_top_intc(pcie);
 		if (ret < 0)
 			goto err_host_probe;
 	}
