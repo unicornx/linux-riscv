@@ -21,81 +21,82 @@
 
 #include "pcie-cadence.h"
 
-#define MAX_MSI_IRQS			512
-#define MAX_MSI_IRQS_PER_CTRL		1
-#define MAX_MSI_CTRLS			(MAX_MSI_IRQS / MAX_MSI_IRQS_PER_CTRL)
-#define MSI_DEF_NUM_VECTORS		512
-#define BYTE_NUM_PER_MSI_VEC		4
+#define MAX_MSI_IRQS		512
+#define MAX_MSI_IRQS_PER_CTRL	1
+#define MAX_MSI_CTRLS		(MAX_MSI_IRQS / MAX_MSI_IRQS_PER_CTRL)
+#define MSI_DEF_NUM_VECTORS	512
+#define BYTE_NUM_PER_MSI_VEC	4
 
 // mango sideband signals
-#define CDNS_PCIE_IRS_REG0804       0x0804
-#define CDNS_PCIE_IRS_REG080C       0x080C
-#define CDNS_PCIE_IRS_REG0810       0x0810
-#define CDNS_PCIE_IRS_REG085C       0x085C
-#define CDNS_PCIE_IRS_REG0860       0x0860
-#define CDNS_PCIE_IRS_REG0864       0x0864
-#define CDNS_PCIE_IRS_REG0868       0x0868
-#define CDNS_PCIE_IRS_REG086C       0x086C
+#define CDNS_PCIE_IRS_REG0804	0x0804
+#define CDNS_PCIE_IRS_REG080C	0x080C
+#define CDNS_PCIE_IRS_REG0810	0x0810
+#define CDNS_PCIE_IRS_REG085C	0x085C
+#define CDNS_PCIE_IRS_REG0860	0x0860
+#define CDNS_PCIE_IRS_REG0864	0x0864
+#define CDNS_PCIE_IRS_REG0868	0x0868
+#define CDNS_PCIE_IRS_REG086C	0x086C
 
-#define CDNS_PCIE_IRS_REG0804_CLR_LINK0_MSI_IN_BIT		2
-#define CDNS_PCIE_IRS_REG0804_CLR_LINK1_MSI_IN_BIT		3
-#define CDNS_PCIE_IRS_REG0810_ST_LINK0_MSI_IN_BIT		2
-#define CDNS_PCIE_IRS_REG0810_ST_LINK1_MSI_IN_BIT		3
+#define CDNS_PCIE_IRS_REG0804_CLR_LINK0_MSI_IN_BIT	2
+#define CDNS_PCIE_IRS_REG0804_CLR_LINK1_MSI_IN_BIT	3
+#define CDNS_PCIE_IRS_REG0810_ST_LINK0_MSI_IN_BIT	2
+#define CDNS_PCIE_IRS_REG0810_ST_LINK1_MSI_IN_BIT	3
 
-#define CDNS_PLAT_CPU_TO_BUS_ADDR       0xCFFFFFFFFF
+#define CDNS_PLAT_CPU_TO_BUS_ADDR	0xCFFFFFFFFF
 
 struct sg2042_pcie {
-	struct cdns_pcie	*cdns_pcie;
+	struct cdns_pcie *cdns_pcie;
 
-	// Fully private members for sg2042
-	u32			pcie_id; // FIXME dts 设置了，但是代码中用不到
-	u32			link_id;
-	u32			top_intc_used;
+	struct regmap *syscon;
 
-	// 用于存放 pci_msi_create_irq_domain 的结果
-	// 这个变量对于使用或者于不使用 top-intc 的情况都会用到
-	struct irq_domain	*msi_domain;
+	u32 pcie_id; // FIXME dts 设置了，但是代码中用不到
+	u32 link_id;
+	u32 top_intc_used;
 
-	// 下面的成员都是和 pcie-intc 处理有关
-	int			msi_irq;
-	struct irq_domain	*irq_domain; // FIXME：这个成员名称和结构体名字相同了，不好的编程习惯，建议改掉。
-	dma_addr_t		msi_data;
-	void			*msi_page;
-	struct irq_chip		*msi_irq_chip;
-	u32			num_vectors; // FIXME: 这个成员感觉用处不大。初始化为 MSI_DEF_NUM_VECTORS 就不变的。
-	u32			num_applied_vecs; // FIXME：增加这个成员的作用是为了代码优化，避免每次都要循环 512。可能改个名字会更好，仅仅是为了优化。
-	raw_spinlock_t		lock;
+	struct irq_domain *msi_domain;
+	int msi_irq;
+	dma_addr_t msi_data;
+	void *msi_page;
+	u32 num_vectors; // FIXME: 这个成员感觉用处不大。初始化为 MSI_DEF_NUM_VECTORS 就不变的。
+	u32 num_applied_vecs; // FIXME：增加这个成员的作用是为了代码优化，避免每次都要循环 512。可能改个名字会更好，仅仅是为了优化。
+	raw_spinlock_t lock;
 	DECLARE_BITMAP(msi_irq_in_use, MAX_MSI_IRQS);
-	struct regmap		*syscon;
 };
 
-static void sg2042_msi_ack_irq(struct irq_data *d)
+/*
+ * We use the usual two domain structure, the top one being a generic PCI/MSI
+ * domain, the bottom one being SG2042-specific and handling the actual HW
+ * interrupt allocation.
+ * At the same time, bottom chip uses a chained handler to handle the controller's
+ * MSI IRQ edge triggered.
+ */
+static void sg2042_pcie_msi_top_irq_ack(struct irq_data *d)
 {
 	irq_chip_ack_parent(d);
 }
 
-static void sg2042_msi_mask_irq(struct irq_data *d)
+static void sg2042_pcie_msi_top_irq_mask(struct irq_data *d)
 {
 	pci_msi_mask_irq(d);
 	irq_chip_mask_parent(d);
 }
 
-static void sg2042_msi_unmask_irq(struct irq_data *d)
+static void sg2042_pcie_msi_top_irq_unmask(struct irq_data *d)
 {
 	pci_msi_unmask_irq(d);
 	irq_chip_unmask_parent(d);
 }
 
-static struct irq_chip sg2042_pcie_msi_irq_chip = {
-	.name = "PCI-MSI",
-	.irq_ack = sg2042_msi_ack_irq,
-	.irq_mask = sg2042_msi_mask_irq,
-	.irq_unmask = sg2042_msi_unmask_irq,
+static struct irq_chip sg2042_pcie_msi_top_chip = {
+	.name = "SG2042 PCIe MSI",
+	.irq_ack = sg2042_pcie_msi_top_irq_ack,
+	.irq_mask = sg2042_pcie_msi_top_irq_mask,
+	.irq_unmask = sg2042_pcie_msi_top_irq_unmask,
 };
 
 static struct msi_domain_info sg2042_pcie_msi_domain_info = {
 	.flags	= (MSI_FLAG_USE_DEF_DOM_OPS | MSI_FLAG_USE_DEF_CHIP_OPS),
-	.chip	= &sg2042_pcie_msi_irq_chip,
+	.chip	= &sg2042_pcie_msi_top_chip,
 };
 
 // top-intc
@@ -164,7 +165,7 @@ static irqreturn_t sg2042_pcie_handle_msi_irq(struct sg2042_pcie *pcie)
 		pos = 0;
 		while ((pos = find_next_bit(&val, MAX_MSI_IRQS_PER_CTRL,
 					    pos)) != MAX_MSI_IRQS_PER_CTRL) {
-			generic_handle_domain_irq(pcie->irq_domain,
+			generic_handle_domain_irq(pcie->msi_domain->parent,
 						  (i * MAX_MSI_IRQS_PER_CTRL) +
 						  pos);
 			pos++;
@@ -176,7 +177,7 @@ static irqreturn_t sg2042_pcie_handle_msi_irq(struct sg2042_pcie *pcie)
 		ret = IRQ_HANDLED;
 		for (i = 0; i <= num_vectors; i++) {
 			for (pos = 0; pos < MAX_MSI_IRQS_PER_CTRL; pos++) {
-				irq = irq_find_mapping(pcie->irq_domain,
+				irq = irq_find_mapping(pcie->msi_domain->parent,
 						       (i * MAX_MSI_IRQS_PER_CTRL) +
 						       pos);
 				if (!irq)
@@ -237,21 +238,15 @@ static void sg2042_pcie_chained_msi_isr(struct irq_desc *desc)
 	chained_irq_exit(chip, desc);
 }
 
-static int sg2042_pcie_msi_set_affinity(struct irq_data *d,
-					const struct cpumask *mask, bool force)
+static int sg2042_pcie_msi_irq_set_affinity(struct irq_data *d,
+					    const struct cpumask *mask,
+					    bool force)
 {
 	return -EINVAL;
 }
 
-static void sg2042_pcie_bottom_mask(struct irq_data *d)
-{
-}
-
-static void sg2042_pcie_bottom_unmask(struct irq_data *d)
-{
-}
-
-static void sg2042_pcie_setup_msi_msg(struct irq_data *d, struct msi_msg *msg)
+static void sg2042_pcie_msi_irq_compose_msi_msg(struct irq_data *d,
+						struct msi_msg *msg)
 {
 	struct sg2042_pcie *pcie = irq_data_get_irq_chip_data(d);
 	struct device *dev = pcie->cdns_pcie->dev;
@@ -269,22 +264,18 @@ static void sg2042_pcie_setup_msi_msg(struct irq_data *d, struct msi_msg *msg)
 		(int)d->hwirq, msg->address_hi, msg->address_lo);
 }
 
-static void sg2042_pcie_bottom_ack(struct irq_data *d)
+/* Just a dummy function to make irq_chip_xxx_parent happy in top functions */
+static void sg2042_pcie_msi_irq_dummy(struct irq_data *d)
 {
 }
 
-// 这个也是参考的 drivers/pci/controller/dwc/pcie-designware-host.c
-// 中的 dw_pci_msi_bottom_irq_chip
-// FIXME: 大部分函数都没有实现，是否可以删掉？需要学习一下 irq_chip 的回调函数
-// sg2042_pcie_msi_bottom_irq_chip 会在 sg2042_pcie_irq_domain_alloc 中
-// 也就是 irq_domain 的 .alloc 回调中传入 irq_domain_set_info
-static struct irq_chip sg2042_pcie_msi_bottom_irq_chip = {
-	.name = "SG2042-PCI-MSI",
-	.irq_ack = sg2042_pcie_bottom_ack,
-	.irq_compose_msi_msg = sg2042_pcie_setup_msi_msg,
-	.irq_set_affinity = sg2042_pcie_msi_set_affinity,
-	.irq_mask = sg2042_pcie_bottom_mask,
-	.irq_unmask = sg2042_pcie_bottom_unmask,
+static struct irq_chip sg2042_pcie_msi_bottom_chip = {
+	.name = "SG2042 MSI",
+	.irq_ack = sg2042_pcie_msi_irq_dummy,
+	.irq_compose_msi_msg = sg2042_pcie_msi_irq_compose_msi_msg,
+	.irq_set_affinity = sg2042_pcie_msi_irq_set_affinity,
+	.irq_mask = sg2042_pcie_msi_irq_dummy,
+	.irq_unmask = sg2042_pcie_msi_irq_dummy,
 };
 
 // 以下的 sg2042_pcie_msi_domain_ops 和 sg2042_pcie_allocate_domains
@@ -311,7 +302,7 @@ static int sg2042_pcie_irq_domain_alloc(struct irq_domain *domain,
 
 	for (i = 0; i < nr_irqs; i++)
 		irq_domain_set_info(domain, virq + i, bit + i,
-				    pcie->msi_irq_chip,
+				    &sg2042_pcie_msi_bottom_chip,
 				    pcie, handle_edge_irq,
 				    NULL, NULL);
 
@@ -344,27 +335,26 @@ static int sg2042_pcie_allocate_domains(struct sg2042_pcie *pcie)
 {
 	struct device *dev = pcie->cdns_pcie->dev;
 	struct fwnode_handle *fwnode = of_node_to_fwnode(dev->of_node);
+	struct irq_domain *parent;
 
 	// 创建 irq domain
 	// 这个 irq_domain 不仅在下面创建 msi irq domain 中作为 parent domain
 	// 而且在 sg2042_pcie_handle_msi_irq/sg2042_pcie_free_msi 中会被使用，free 中
 	// 主要负责释放
-	pcie->irq_domain = irq_domain_create_linear(fwnode, pcie->num_vectors,
-						    &sg2042_pcie_msi_domain_ops,
-						    pcie);
-	if (!pcie->irq_domain) {
+	parent = irq_domain_create_linear(fwnode, pcie->num_vectors,
+					  &sg2042_pcie_msi_domain_ops, pcie);
+	if (!parent) {
 		dev_err(dev, "Failed to create IRQ domain\n");
 		return -ENOMEM;
 	}
-
-	irq_domain_update_bus_token(pcie->irq_domain, DOMAIN_BUS_NEXUS);
+	irq_domain_update_bus_token(parent, DOMAIN_BUS_NEXUS);
 
 	pcie->msi_domain = pci_msi_create_irq_domain(fwnode,
 						     &sg2042_pcie_msi_domain_info,
-						     pcie->irq_domain);
+						     parent);
 	if (!pcie->msi_domain) {
 		dev_err(dev, "Failed to create MSI domain\n");
-		irq_domain_remove(pcie->irq_domain);
+		irq_domain_remove(parent);
 		return -ENOMEM;
 	}
 
@@ -381,7 +371,7 @@ static void sg2042_pcie_free_msi(struct sg2042_pcie *pcie)
 	}
 
 	irq_domain_remove(pcie->msi_domain);
-	irq_domain_remove(pcie->irq_domain);
+	irq_domain_remove(pcie->msi_domain->parent);
 
 	if (pcie->msi_page)
 		dma_free_coherent(dev, 1024, pcie->msi_page, pcie->msi_data);
@@ -453,13 +443,6 @@ static int sg2042_pcie_setup_msi(struct sg2042_pcie *pcie, struct platform_devic
 	// 初始化一把 lock，这把锁会用于 bitmap_find_free_region/bitmap_release_region
 	// FIMXE? why 需要这把锁？
 	raw_spin_lock_init(&pcie->lock);
-
-	// FIXME，这个逻辑感觉是多余的，从原代码的逻辑看，这里保存了 sg2042_pcie_msi_bottom_irq_chip
-	// 的地址，然后在 sg2042_pcie_irq_domain_alloc 中调用 irq_domain_set_info
-	// 的时候使用，但是 sg2042_pcie_msi_bottom_irq_chip 本身是全局变量
-	// 在 irq_domain_set_info 使用的时候直接引用就好了，不需要转一下。
-	// 不过参考 drivers/pci/controller/dwc/pcie-designware-host.c 里还是存放了这个，看了一下也是感觉多余
-	pcie->msi_irq_chip = &sg2042_pcie_msi_bottom_irq_chip;
 
 	ret = sg2042_pcie_allocate_domains(pcie);
 	if (ret)
