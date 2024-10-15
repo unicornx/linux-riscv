@@ -172,21 +172,6 @@ static irqreturn_t sg2042_pcie_handle_msi_irq(struct sg2042_pcie *pcie)
 		}
 		writel(0, ((void *)(pcie->msi_page) + i * BYTE_NUM_PER_MSI_VEC));
 	}
-	// FIXME: 会再来一遍，据说是为了防止漏中断。可以看看可能可以参考 dw 的处理方式优化。或者作为 vendor 补丁方式
-	if (ret == IRQ_NONE) {
-		ret = IRQ_HANDLED;
-		for (i = 0; i <= num_vectors; i++) {
-			for (pos = 0; pos < MAX_MSI_IRQS_PER_CTRL; pos++) {
-				irq = irq_find_mapping(pcie->msi_domain->parent,
-						       (i * MAX_MSI_IRQS_PER_CTRL) +
-						       pos);
-				if (!irq)
-					continue;
-				generic_handle_irq(irq);
-			}
-		}
-	}
-
 	return ret;
 }
 
