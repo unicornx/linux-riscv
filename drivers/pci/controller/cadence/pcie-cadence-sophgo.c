@@ -21,26 +21,26 @@
 
 #include "pcie-cadence.h"
 
-#define MAX_MSI_IRQS		512
+#define MAX_MSI_IRQS		8
 #define MAX_MSI_IRQS_PER_CTRL	1
 #define MAX_MSI_CTRLS		(MAX_MSI_IRQS / MAX_MSI_IRQS_PER_CTRL)
-#define MSI_DEF_NUM_VECTORS	512
+#define MSI_DEF_NUM_VECTORS	MAX_MSI_IRQS
 #define BYTE_NUM_PER_MSI_VEC	4
 
 // mango sideband signals
-#define CDNS_PCIE_IRS_REG0804	0x0804
-#define CDNS_PCIE_IRS_REG080C	0x080C
-#define CDNS_PCIE_IRS_REG0810	0x0810
-#define CDNS_PCIE_IRS_REG085C	0x085C
-#define CDNS_PCIE_IRS_REG0860	0x0860
-#define CDNS_PCIE_IRS_REG0864	0x0864
-#define CDNS_PCIE_IRS_REG0868	0x0868
-#define CDNS_PCIE_IRS_REG086C	0x086C
+#define IRS_REG0804	0x0804
+#define IRS_REG080C	0x080C
+#define IRS_REG0810	0x0810
+#define IRS_REG085C	0x085C
+#define IRS_REG0860	0x0860
+#define IRS_REG0864	0x0864
+#define IRS_REG0868	0x0868
+#define IRS_REG086C	0x086C
 
-#define CDNS_PCIE_IRS_REG0804_CLR_LINK0_MSI_IN_BIT	2
-#define CDNS_PCIE_IRS_REG0804_CLR_LINK1_MSI_IN_BIT	3
-#define CDNS_PCIE_IRS_REG0810_ST_LINK0_MSI_IN_BIT	2
-#define CDNS_PCIE_IRS_REG0810_ST_LINK1_MSI_IN_BIT	3
+#define IRS_REG0804_CLR_LINK0_MSI_IN_BIT	2
+#define IRS_REG0804_CLR_LINK1_MSI_IN_BIT	3
+#define IRS_REG0810_ST_LINK0_MSI_IN_BIT		2
+#define IRS_REG0810_ST_LINK1_MSI_IN_BIT		3
 
 #define CDNS_PLAT_CPU_TO_BUS_ADDR	0xCFFFFFFFFF
 
@@ -57,8 +57,7 @@ struct sg2042_pcie {
 	int msi_irq;
 	dma_addr_t msi_data;
 	void *msi_page;
-	u32 num_vectors; // FIXME: 这个成员感觉用处不大。初始化为 MSI_DEF_NUM_VECTORS 就不变的。
-	u32 num_applied_vecs; // FIXME：增加这个成员的作用是为了代码优化，避免每次都要循环 512。可能改个名字会更好，仅仅是为了优化。
+	u32 num_applied_vecs; /* number of applied vectors, used to speed up in ISR */
 	raw_spinlock_t lock;
 	DECLARE_BITMAP(msi_irq_in_use, MAX_MSI_IRQS);
 };
@@ -99,7 +98,6 @@ static struct msi_domain_info sg2042_pcie_msi_domain_info = {
 	.chip	= &sg2042_pcie_msi_top_chip,
 };
 
-// top-intc
 static struct irq_domain *sg2042_pcie_get_parent_irq_domain(struct device *dev)
 {
 	struct device_node *np = dev->of_node;
@@ -146,10 +144,9 @@ static int sg2042_pcie_setup_top_intc(struct sg2042_pcie *pcie)
 	return 0;
 }
 
-// pcie-intc
 static irqreturn_t sg2042_pcie_handle_msi_irq(struct sg2042_pcie *pcie)
 {
-	u32 i, pos, irq;
+	u32 i, pos;
 	unsigned long val;
 	u32 status, num_vectors;
 	irqreturn_t ret = IRQ_NONE;
@@ -175,10 +172,6 @@ static irqreturn_t sg2042_pcie_handle_msi_irq(struct sg2042_pcie *pcie)
 	return ret;
 }
 
-// pcie-intc
-// msi 逻辑会走到这里
-// 核心是调用的 sg2042_pcie_handle_msi_irq
-/* Chained MSI interrupt service routine */
 static void sg2042_pcie_chained_msi_isr(struct irq_desc *desc)
 {
 	struct irq_chip *chip = irq_desc_get_chip(desc);
@@ -191,32 +184,25 @@ static void sg2042_pcie_chained_msi_isr(struct irq_desc *desc)
 
 	pcie = irq_desc_get_handler_data(desc);
 	if (pcie->link_id == 1) {
-		st_msi_in_bit = CDNS_PCIE_IRS_REG0810_ST_LINK1_MSI_IN_BIT;
-		clr_msi_in_bit = CDNS_PCIE_IRS_REG0804_CLR_LINK1_MSI_IN_BIT;
+		st_msi_in_bit = IRS_REG0810_ST_LINK1_MSI_IN_BIT;
+		clr_msi_in_bit = IRS_REG0804_CLR_LINK1_MSI_IN_BIT;
 	} else {
-		st_msi_in_bit = CDNS_PCIE_IRS_REG0810_ST_LINK0_MSI_IN_BIT;
-		clr_msi_in_bit = CDNS_PCIE_IRS_REG0804_CLR_LINK0_MSI_IN_BIT;
+		st_msi_in_bit = IRS_REG0810_ST_LINK0_MSI_IN_BIT;
+		clr_msi_in_bit = IRS_REG0804_CLR_LINK0_MSI_IN_BIT;
 	}
 
-	regmap_read(pcie->syscon, CDNS_PCIE_IRS_REG0810, &status);
+	regmap_read(pcie->syscon, IRS_REG0810, &status);
 	if ((status >> st_msi_in_bit) & 0x1) {
 		WARN_ON(!IS_ENABLED(CONFIG_PCI_MSI));
 
-		//clear msi interrupt bit reg0810[2]
-		regmap_read(pcie->syscon, CDNS_PCIE_IRS_REG0804, &status);
+		regmap_read(pcie->syscon, IRS_REG0804, &status);
 		status |= ((u32)0x1 << clr_msi_in_bit);
-		regmap_write(pcie->syscon, CDNS_PCIE_IRS_REG0804, status);
+		regmap_write(pcie->syscon, IRS_REG0804, status);
 
-		// FIXME: 为啥对 804 写 1 然后还要写 0？一般不是会自动翻转吗？
-		// A: 和硬件 IC 确认了一下，这步不能省，硬件不会自动翻转为 0，需要软件手动翻转
+		/* need write 0 to reset, hardware will not reset automaticly */
 		status &= ~((u32)0x1 << clr_msi_in_bit);
-		regmap_write(pcie->syscon, CDNS_PCIE_IRS_REG0804, status);
+		regmap_write(pcie->syscon, IRS_REG0804, status);
 
-		// FIXME: 为啥是在 cdns_handle_msi_irq之前清，而不是之后？
-		// A: 先清中断，是想让其他中断能够继续上报, 方便后面处理
-		// 但和硬件确认后，清中断只是将 status 标志恢复为 0，但 MSI data 
-		// 的写入操作和中断上报完全是异步的，RC 一旦收到 EP 的 MSI 通知
-		// 就会对 msi data 内存区进行写，和 cpu 这边是否去 clear 并无关系。
 		sg2042_pcie_handle_msi_irq(pcie);
 	}
 
@@ -249,7 +235,7 @@ static void sg2042_pcie_msi_irq_compose_msi_msg(struct irq_data *d,
 		(int)d->hwirq, msg->address_hi, msg->address_lo);
 }
 
-/* Just a dummy function to make irq_chip_xxx_parent happy in top functions */
+/* Just a dummy function to make irq_chip_xxx_parent happy in top chip callbacks */
 static void sg2042_pcie_msi_irq_dummy(struct irq_data *d)
 {
 }
@@ -263,9 +249,6 @@ static struct irq_chip sg2042_pcie_msi_bottom_chip = {
 	.irq_unmask = sg2042_pcie_msi_irq_dummy,
 };
 
-// 以下的 sg2042_pcie_msi_domain_ops 和 sg2042_pcie_allocate_domains
-// 参考了 drivers/pci/controller/dwc/pcie-designware-host.c
-// 中的 dw_pcie_msi_domain_ops 和 dw_pcie_allocate_domains
 static int sg2042_pcie_irq_domain_alloc(struct irq_domain *domain,
 					unsigned int virq, unsigned int nr_irqs,
 					void *args)
@@ -277,7 +260,7 @@ static int sg2042_pcie_irq_domain_alloc(struct irq_domain *domain,
 
 	raw_spin_lock_irqsave(&pcie->lock, flags);
 
-	bit = bitmap_find_free_region(pcie->msi_irq_in_use, pcie->num_vectors,
+	bit = bitmap_find_free_region(pcie->msi_irq_in_use, MSI_DEF_NUM_VECTORS,
 				      order_base_2(nr_irqs));
 
 	raw_spin_unlock_irqrestore(&pcie->lock, flags);
@@ -314,19 +297,13 @@ static const struct irq_domain_ops sg2042_pcie_msi_domain_ops = {
 	.free	= sg2042_pcie_irq_domain_free,
 };
 
-// 这个函数参考了 drivers/pci/controller/dwc/pcie-designware-host.c
-// 中的 dw_pcie_allocate_domains
 static int sg2042_pcie_allocate_domains(struct sg2042_pcie *pcie)
 {
 	struct device *dev = pcie->cdns_pcie->dev;
 	struct fwnode_handle *fwnode = of_node_to_fwnode(dev->of_node);
 	struct irq_domain *parent;
 
-	// 创建 irq domain
-	// 这个 irq_domain 不仅在下面创建 msi irq domain 中作为 parent domain
-	// 而且在 sg2042_pcie_handle_msi_irq/sg2042_pcie_free_msi 中会被使用，free 中
-	// 主要负责释放
-	parent = irq_domain_create_linear(fwnode, pcie->num_vectors,
+	parent = irq_domain_create_linear(fwnode, MSI_DEF_NUM_VECTORS,
 					  &sg2042_pcie_msi_domain_ops, pcie);
 	if (!parent) {
 		dev_err(dev, "Failed to create IRQ domain\n");
@@ -363,7 +340,6 @@ static void sg2042_pcie_free_msi(struct sg2042_pcie *pcie)
 
 }
 
-// 分配一块连续的内存用于存放 msi data, 然后将该内存的物理地址告诉 pcie-intc
 static int sg2042_pcie_msi_init(struct sg2042_pcie *pcie)
 {
 	struct device *dev = pcie->cdns_pcie->dev;
@@ -381,24 +357,24 @@ static int sg2042_pcie_msi_init(struct sg2042_pcie *pcie)
 
 	if (pcie->link_id == 1) {
 		/* Program the msi_data */
-		regmap_write(pcie->syscon, CDNS_PCIE_IRS_REG0868,
+		regmap_write(pcie->syscon, IRS_REG0868,
 				 lower_32_bits(msi_target));
-		regmap_write(pcie->syscon, CDNS_PCIE_IRS_REG086C,
+		regmap_write(pcie->syscon, IRS_REG086C,
 				 upper_32_bits(msi_target));
 
-		regmap_read(pcie->syscon, CDNS_PCIE_IRS_REG080C, &value);
+		regmap_read(pcie->syscon, IRS_REG080C, &value);
 		value = (value & 0xffff0000) | MAX_MSI_IRQS;
-		regmap_write(pcie->syscon, CDNS_PCIE_IRS_REG080C, value);
+		regmap_write(pcie->syscon, IRS_REG080C, value);
 	} else {
 		/* Program the msi_data */
-		regmap_write(pcie->syscon, CDNS_PCIE_IRS_REG0860,
+		regmap_write(pcie->syscon, IRS_REG0860,
 				 lower_32_bits(msi_target));
-		regmap_write(pcie->syscon, CDNS_PCIE_IRS_REG0864,
+		regmap_write(pcie->syscon, IRS_REG0864,
 				 upper_32_bits(msi_target));
 
-		regmap_read(pcie->syscon, CDNS_PCIE_IRS_REG085C, &value);
+		regmap_read(pcie->syscon, IRS_REG085C, &value);
 		value = (value & 0x0000ffff) | (MAX_MSI_IRQS << 16);
-		regmap_write(pcie->syscon, CDNS_PCIE_IRS_REG085C, value);
+		regmap_write(pcie->syscon, IRS_REG085C, value);
 	}
 
 	return 0;
@@ -408,9 +384,6 @@ static int sg2042_pcie_setup_msi(struct sg2042_pcie *pcie, struct platform_devic
 {
 	struct device *dev = pcie->cdns_pcie->dev;
 	int ret = 0;
-
-	pcie->num_vectors = MSI_DEF_NUM_VECTORS;
-	pcie->num_applied_vecs = 0; // FIXME. 可以省略，默认为 zero
 
 	ret = sg2042_pcie_msi_init(pcie);
 	if (ret) {
