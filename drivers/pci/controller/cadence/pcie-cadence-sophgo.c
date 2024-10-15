@@ -162,13 +162,11 @@ static irqreturn_t sg2042_pcie_handle_msi_irq(struct sg2042_pcie *pcie)
 		ret = IRQ_HANDLED;
 		val = status;
 		pos = 0;
-		// FIXME: 按照 dw 的做法，得到 bitmap bit 后直接 generic_handle_domain_irq 不可以吗？
 		while ((pos = find_next_bit(&val, MAX_MSI_IRQS_PER_CTRL,
 					    pos)) != MAX_MSI_IRQS_PER_CTRL) {
-			irq = irq_find_mapping(pcie->irq_domain,
-					       (i * MAX_MSI_IRQS_PER_CTRL) +
-					       pos);
-			generic_handle_irq(irq);
+			generic_handle_domain_irq(pcie->irq_domain,
+						  (i * MAX_MSI_IRQS_PER_CTRL) +
+						  pos);
 			pos++;
 		}
 		writel(0, ((void *)(pcie->msi_page) + i * BYTE_NUM_PER_MSI_VEC));
