@@ -878,10 +878,8 @@
 		      <0x70 0x30010304 0x0 0x4>;
 		reg-names = "sta", "set", "clr";
 		reg-bitwidth = <32>;
-		top_intc_id = <0>;
 		interrupt-controller;
 		#interrupt-cells = <0x1>; // only applies to child node
-		for-msi;
 
 		interrupt-parent = <&intc>;
 		interrupts = <SOC_PERIPHERAL_IRQ(64) IRQ_TYPE_LEVEL_HIGH>,

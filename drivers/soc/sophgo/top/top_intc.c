@@ -1,18 +1,18 @@
-#include <linux/module.h>
-#include <linux/kernel.h>
-#include <linux/slab.h>
-#include <linux/platform_device.h>
 #include <linux/io.h>
-#include <linux/of.h>
-#include <linux/of_platform.h>
-#include <linux/of_pci.h>
-#include <linux/msi.h>
 #include <linux/irq.h>
 #include <linux/irqdomain.h>
 #include <linux/irqchip/chained_irq.h>
+#include <linux/kernel.h>
+#include <linux/module.h>
+#include <linux/msi.h>
+#include <linux/of.h>
+#include <linux/of_platform.h>
+#include <linux/of_pci.h>
+#include <linux/platform_device.h>
+#include <linux/slab.h>
 
 #define MAX_IRQ_NUMBER 32
-#define TOP_INTC_NUM 2
+
 /*
  * here we assume all plic hwirq and tic hwirq should
  * be contiguous.
@@ -31,7 +31,6 @@ struct top_intc_data {
 	int irq_num;
 	struct irq_domain *domain;
 	struct irq_chip *chip;
-	int for_msi;
 	int reg_bitwidth;
 
 	DECLARE_BITMAP(irq_bitmap, MAX_IRQ_NUMBER);
@@ -74,54 +73,27 @@ static int top_intc_domain_alloc(struct irq_domain *domain,
 {
 	unsigned long flags;
 	irq_hw_number_t hwirq;
-	int i, type, ret = -1;
+	int i, ret = -1;
 	struct top_intc_data *data = domain->host_data;
 
-	if (data->for_msi) {
-		// dynamically alloc hwirq
-		spin_lock_irqsave(&data->lock, flags);
-		ret = bitmap_find_free_region(data->irq_bitmap, data->irq_num,
-						order_base_2(nr_irqs));
+	// dynamically alloc hwirq
+	spin_lock_irqsave(&data->lock, flags);
+	ret = bitmap_find_free_region(data->irq_bitmap, data->irq_num,
+				      order_base_2(nr_irqs));
+	spin_unlock_irqrestore(&data->lock, flags);
 
-		spin_unlock_irqrestore(&data->lock, flags);
+	if (ret < 0) {
+		pr_err("%s failed to alloc irq %d, total %d\n", __func__, virq, nr_irqs);
+		return -ENOSPC;
+	}
 
-		if (ret < 0) {
-			pr_err("%s failed to alloc irq %d, total %d\n", __func__, virq, nr_irqs);
-			return -ENOSPC;
-		}
-
-		hwirq = ret;
-		for (i = 0; i < nr_irqs; i++) {
-			irq_domain_set_info(domain, virq + i, hwirq + i,
-						data->chip,
-						data, handle_edge_irq,
-						NULL, NULL);
-			data->tic_to_plic[hwirq + i] = data->plic_hwirqs[hwirq + i];
-		}
-	} else {
-		// try use hwirq specified in parameter
-		ret = top_intc_domain_translate(domain, args, &hwirq, &type);
-		if (ret) {
-			pr_err("%s failed to translate virq %d, %d\n", __func__, virq, ret);
-			return ret;
-		}
-
-		// try to occupy bitmap for the given hwirq
-		spin_lock_irqsave(&data->lock, flags);
-		ret = bitmap_allocate_region(data->irq_bitmap, hwirq, order_base_2(1));
-		spin_unlock_irqrestore(&data->lock, flags);
-		if (ret < 0) {
-			pr_err("%s virq %d found hwirq %ld occupied\n", __func__, virq, hwirq);
-			return -EBUSY;
-		}
-
-		irq_domain_set_info(domain, virq, hwirq,
-					data->chip,
-					data, handle_edge_irq,
-					NULL, NULL);
-
-		// explicitly set parent
-		data->tic_to_plic[hwirq] = data->plic_hwirqs[hwirq];
+	hwirq = ret;
+	for (i = 0; i < nr_irqs; i++) {
+		irq_domain_set_info(domain, virq + i, hwirq + i,
+				    data->chip,
+				    data, handle_edge_irq,
+				    NULL, NULL);
+		data->tic_to_plic[hwirq + i] = data->plic_hwirqs[hwirq + i];
 	}
 
 	pr_info("----> %s hwirq %ld, irq %d, plic irq %d, total %d\n", __func__,
@@ -272,11 +244,6 @@ static int top_intc_probe(struct platform_device *pdev)
 	struct resource *res;
 	struct fwnode_handle *fwnode = of_node_to_fwnode(pdev->dev.of_node);
 	int ret = 0, i;
-	int intc_id = 0;
-
-	device_property_read_u32(&pdev->dev, "top-intc-id", &intc_id);
-	if (intc_id >= TOP_INTC_NUM)
-		return -EINVAL;
 
 	// alloc private data
 	data = kzalloc(sizeof(struct top_intc_data), GFP_KERNEL);
@@ -286,13 +253,6 @@ static int top_intc_probe(struct platform_device *pdev)
 	data->pdev = pdev;
 	spin_lock_init(&data->lock);
 
-	// FIXME 为啥要区分 for_msi
-	// dts 中 top_intc 只有 for-msi 的，所以这个属性是否可以做成必选的，从而简化代码的逻辑？
-	// A: 这个功能先不支持，默认只支持 MSI
-	if (device_property_read_bool(&pdev->dev, "for-msi")) {
-		dev_info(&pdev->dev, "is a msi parent\n");
-		data->for_msi = 1;
-	}
 	if (device_property_read_u32(&pdev->dev, "reg-bitwidth", &data->reg_bitwidth))
 		data->reg_bitwidth = 32;
 
@@ -349,24 +309,12 @@ static int top_intc_probe(struct platform_device *pdev)
 	}
 	data->chip = &top_intc_irq_chip;
 
-	/*
-	 * workaround to deal with IRQ conflict with TPU driver,
-	 * skip the firt IRQ and mark it as used.
-	 */
-	//bitmap_allocate_region(data->irq_bitmap, 0, order_base_2(1));
 	for (i = 0; i < data->irq_num; i++)
 		irq_set_chained_handler_and_data(data->plic_irqs[i],
-							top_intc_irq_handler, data);
+						 top_intc_irq_handler, data);
 
-	if (data->for_msi) {
-		irq_domain_update_bus_token(data->domain, DOMAIN_BUS_NEXUS);
-	}  else {
-		/*
-		 * populate child nodes. when test device node is a child, it will not be
-		 * automatically enumerated as a platform device.
-		 */
-		of_platform_populate(pdev->dev.of_node, NULL, NULL, NULL);
-	}
+	irq_domain_update_bus_token(data->domain, DOMAIN_BUS_NEXUS);
+
 	return ret;
 
 out:
