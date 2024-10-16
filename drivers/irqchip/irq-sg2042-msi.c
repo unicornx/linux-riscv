@@ -329,24 +329,15 @@ out:
 }
 
 static const struct of_device_id top_intc_of_match[] = {
-	{
-		.compatible = "sophgo,top-intc",
-	},
-	{},
+	{ .compatible = "sophgo,top-intc" },
+	{}
 };
 
 static struct platform_driver top_intc_driver = {
 	.driver = {
 		.name = "sophgo,top-intc",
-		.owner = THIS_MODULE,
 		.of_match_table = of_match_ptr(top_intc_of_match),
 	},
 	.probe = top_intc_probe,
 };
-
-static int __init top_intc_init(void)
-{
-	return platform_driver_register(&top_intc_driver);
-}
-
-arch_initcall(top_intc_init);
+builtin_platform_driver(top_intc_driver);
