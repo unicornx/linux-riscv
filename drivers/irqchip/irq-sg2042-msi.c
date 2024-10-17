@@ -34,14 +34,13 @@ struct top_intc_data {
 	int reg_bitwidth;
 
 	DECLARE_BITMAP(irq_bitmap, MAX_IRQ_NUMBER);
-	spinlock_t lock;
+	spinlock_t lock; // FIXME: mutex?
 
-	void __iomem *reg_sta; // 状态寄存器，对应 TRM 上的 10.1.31 GP_INTR_REGISTER 的 GP_INTR_REGISTER_0
-	void __iomem *reg_set; // 对应 TRM 上的 10.1.32 GP_INTR0_SET: offset 0x300
-	void __iomem *reg_clr; // 对应 TRM 上的 10.1.33 GP_INTR0_CLR: offset 0x304
+	void __iomem *reg_sta; /* status reg, see TRM, 10.1.31, GP_INTR_REGISTER_0 */
+	void __iomem *reg_set; /* set reg, see TRM, 10.1.32, GP_INTR0_SET */
+	void __iomem *reg_clr; /* clear reg, see TRM, 10.1.33, GP_INTR0_CLR */
 
-	phys_addr_t reg_set_phys; // 用于 MSI 的 address，对应 reg_set 的首地址（物理）
-				// 该 32 bit 的寄存器上的每一位对应一个 MSI 中断
+	phys_addr_t reg_set_phys; /* MSI physical address */
 
 	irq_hw_number_t		plic_hwirqs[MAX_IRQ_NUMBER];
 	int			plic_irqs[MAX_IRQ_NUMBER];
@@ -76,7 +75,6 @@ static int top_intc_domain_alloc(struct irq_domain *domain,
 	int i, ret = -1;
 	struct top_intc_data *data = domain->host_data;
 
-	// dynamically alloc hwirq
 	spin_lock_irqsave(&data->lock, flags);
 	ret = bitmap_find_free_region(data->irq_bitmap, data->irq_num,
 				      order_base_2(nr_irqs));
@@ -198,7 +196,7 @@ static int top_intc_set_type(struct irq_data *d, u32 type)
 }
 
 static struct irq_chip top_intc_irq_chip = {
-	.name = "top-intc",
+	.name = "PCIE MSI",
 	.irq_ack = top_intc_ack_irq,
 	.irq_mask = top_intc_mask_irq,
 	.irq_unmask = top_intc_unmask_irq,
@@ -240,92 +238,82 @@ static void top_intc_irq_handler(struct irq_desc *plic_desc)
 
 static int top_intc_probe(struct platform_device *pdev)
 {
+	struct fwnode_handle *fwnode = of_node_to_fwnode(pdev->dev.of_node);
 	struct top_intc_data *data;
 	struct resource *res;
-	struct fwnode_handle *fwnode = of_node_to_fwnode(pdev->dev.of_node);
-	int ret = 0, i;
+	int i;
 
-	// alloc private data
-	data = kzalloc(sizeof(struct top_intc_data), GFP_KERNEL);
+	data = devm_kzalloc(&pdev->dev, sizeof(struct top_intc_data), GFP_KERNEL);
 	if (!data)
 		return -ENOMEM;
-	platform_set_drvdata(pdev, data);
+
 	data->pdev = pdev;
 	spin_lock_init(&data->lock);
 
 	if (device_property_read_u32(&pdev->dev, "reg-bitwidth", &data->reg_bitwidth))
 		data->reg_bitwidth = 32;
 
-	// get register address
-	res = platform_get_resource_byname(pdev, IORESOURCE_MEM, "sta");
-	data->reg_sta = devm_ioremap_resource(&pdev->dev, res);
+	data->reg_sta = devm_platform_ioremap_resource_byname(pdev, "sta");
 	if (IS_ERR(data->reg_sta)) {
-		dev_err(&pdev->dev, "failed map status register\n");
-		ret = PTR_ERR(data->reg_sta);
-		goto out;
+		dev_err(&pdev->dev, "Failed to map status register\n");
+		return PTR_ERR(data->reg_sta);
 	}
 	res = platform_get_resource_byname(pdev, IORESOURCE_MEM, "set");
 	data->reg_set = devm_ioremap_resource(&pdev->dev, res);
 	if (IS_ERR(data->reg_set)) {
-		dev_err(&pdev->dev, "failed map set register\n");
-		ret = PTR_ERR(data->reg_set);
-		goto out;
+		dev_err(&pdev->dev, "Failed map set register\n");
+		return PTR_ERR(data->reg_set);
 	}
 	data->reg_set_phys = res->start;
-	res = platform_get_resource_byname(pdev, IORESOURCE_MEM, "clr");
-	data->reg_clr = devm_ioremap_resource(&pdev->dev, res);
+	data->reg_clr = devm_platform_ioremap_resource_byname(pdev, "clr");
 	if (IS_ERR(data->reg_clr)) {
-		dev_err(&pdev->dev, "failed map clear register\n");
-		ret = PTR_ERR(data->reg_clr);
-		goto out;
+		dev_err(&pdev->dev, "Failed to map clear register\n");
+		return PTR_ERR(data->reg_clr);
 	}
 
-	// get irq numbers
 	for (i = 0; i < ARRAY_SIZE(data->plic_hwirqs); i++) {
-		char name[8];
+		char msi_name[8];
 		int irq;
 
-		snprintf(name, ARRAY_SIZE(name), "msi%d", i);
-		irq = platform_get_irq_byname(pdev, name);
-		if (irq < 0)
+		snprintf(msi_name, ARRAY_SIZE(msi_name), "msi%d", i);
+		irq = platform_get_irq_byname_optional(pdev, msi_name);
+		if (irq == -ENXIO)
 			break;
+		if (irq < 0)
+			return dev_err_probe(&pdev->dev, irq,
+					     "Failed to parse MSI IRQ '%s'\n",
+					     msi_name);
 
 		data->plic_irqs[i] = irq;
 		data->plic_irq_datas[i] = irq_get_irq_data(irq);
 		data->plic_hwirqs[i] = data->plic_irq_datas[i]->hwirq;
-		dev_dbg(&pdev->dev, "%s: plic hwirq %ld, plic irq %d\n", name,
-				data->plic_hwirqs[i], data->plic_irqs[i]);
+		dev_dbg(&pdev->dev, "%s[%d]: plic hwirq %ld, plic irq %d\n", msi_name, i,
+			data->plic_hwirqs[i], data->plic_irqs[i]);
+	}
+	if (!i) {
+		dev_err(&pdev->dev, "No MSI IRQ provided!\n");
+		return -ENXIO;
 	}
 	data->irq_num = i;
-	dev_dbg(&pdev->dev, "got %d plic irqs\n", data->irq_num);
 
-	// create IRQ domain
+	/* create MSI domain */
 	data->domain = irq_domain_create_linear(fwnode, data->irq_num,
 						&top_intc_domain_ops, data);
 	if (!data->domain) {
-		dev_err(&pdev->dev, "create linear irq doamin failed\n");
-		ret = -ENODEV;
-		goto out;
+		dev_err(&pdev->dev, "Failed to create IRQ doamin\n");
+		return -ENODEV;
 	}
+	irq_domain_update_bus_token(data->domain, DOMAIN_BUS_NEXUS);
+
 	data->chip = &top_intc_irq_chip;
 
 	for (i = 0; i < data->irq_num; i++)
 		irq_set_chained_handler_and_data(data->plic_irqs[i],
 						 top_intc_irq_handler, data);
 
-	irq_domain_update_bus_token(data->domain, DOMAIN_BUS_NEXUS);
+	platform_set_drvdata(pdev, data);
 
-	return ret;
-
-out:
-	if (data->reg_sta)
-		iounmap(data->reg_sta);
-	if (data->reg_set)
-		iounmap(data->reg_set);
-	if (data->reg_clr)
-		iounmap(data->reg_clr);
-	kfree(data);
-	return ret;
+	return 0;
 }
 
 static const struct of_device_id top_intc_of_match[] = {
