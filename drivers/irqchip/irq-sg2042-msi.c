@@ -25,6 +25,7 @@
  *
  * now we pre-requested plic interrupt, but may try request
  * plic interrupt when needed, like gicp_irq_domain_alloc.
+ * see drivers/irqchip/irq-mvebu-gicp.c
  */
 struct top_intc_data {
 	struct platform_device *pdev;
@@ -42,29 +43,11 @@ struct top_intc_data {
 
 	phys_addr_t reg_set_phys; /* MSI physical address */
 
-	irq_hw_number_t		plic_hwirqs[MAX_IRQ_NUMBER];
-	int			plic_irqs[MAX_IRQ_NUMBER];
-	struct irq_data		*plic_irq_datas[MAX_IRQ_NUMBER];
-	int			tic_to_plic[MAX_IRQ_NUMBER]; // mapping from tic hwirq to plic hwirq
+	irq_hw_number_t plic_hwirqs[MAX_IRQ_NUMBER];
+	int plic_irqs[MAX_IRQ_NUMBER];
+	struct irq_data *plic_irq_datas[MAX_IRQ_NUMBER];
+	int tic_to_plic[MAX_IRQ_NUMBER]; /* mapping from tic hwirq to plic hwirq */
 };
-
-static int top_intc_domain_translate(struct irq_domain *d,
-				    struct irq_fwspec *fwspec,
-				    unsigned long *hwirq,
-				    unsigned int *type)
-{
-	struct top_intc_data *data = d->host_data;
-
-	if (fwspec->param_count != 2)
-		return -EINVAL;
-	if (fwspec->param[1] >= data->irq_num)
-		return -EINVAL;
-
-	*hwirq = fwspec->param[0];
-	*type = fwspec->param[1] & IRQ_TYPE_SENSE_MASK;
-	pr_debug("%s hwirq %d, flag %d\n", __func__, fwspec->param[0], fwspec->param[1]);
-	return 0;
-}
 
 static int top_intc_domain_alloc(struct irq_domain *domain,
 				unsigned int virq, unsigned int nr_irqs,
@@ -116,7 +99,6 @@ static void top_intc_domain_free(struct irq_domain *domain,
 }
 
 static const struct irq_domain_ops top_intc_domain_ops = {
-	.translate = top_intc_domain_translate,
 	.alloc	= top_intc_domain_alloc,
 	.free	= top_intc_domain_free,
 };
@@ -148,7 +130,8 @@ static void top_intc_mask_irq(struct irq_data *d)
 
 	pr_debug("%s %ld, parent %s/%ld\n", __func__, d->hwirq,
 		plic_irq_data->domain->name, plic_irq_data->hwirq);
-	plic_irq_data->chip->irq_mask(plic_irq_data);
+	if (plic_irq_data->chip->irq_mask)
+		plic_irq_data->chip->irq_mask(plic_irq_data);
 }
 
 static void top_intc_unmask_irq(struct irq_data *d)
@@ -158,7 +141,8 @@ static void top_intc_unmask_irq(struct irq_data *d)
 
 	pr_debug("%s %ld, parent %s/%ld\n", __func__, d->hwirq,
 		plic_irq_data->domain->name, plic_irq_data->hwirq);
-	plic_irq_data->chip->irq_unmask(plic_irq_data);
+	if (plic_irq_data->chip->irq_unmask)
+		plic_irq_data->chip->irq_unmask(plic_irq_data);
 }
 
 static void top_intc_setup_msi_msg(struct irq_data *d, struct msi_msg *msg)
