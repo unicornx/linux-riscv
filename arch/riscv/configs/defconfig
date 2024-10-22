@@ -207,7 +207,7 @@ CONFIG_DEVTMPFS_MOUNT=y
 CONFIG_DEVTMPFS_SAFE=y
 # CONFIG_FW_LOADER_DEBUG is not set
 CONFIG_EXTRA_FIRMWARE="radeon/CAICOS_pfp.bin radeon/CAICOS_me.bin radeon/BTC_rlc.bin radeon/CAICOS_mc.bin radeon/CAICOS_smc.bin radeon/SUMO_uvd.bin"
-CONFIG_EXTRA_FIRMWARE_DIR="/home/wangchen/ws/dev-linux/ilovelinux/firmware"
+CONFIG_EXTRA_FIRMWARE_DIR="/lib/firmware"
 CONFIG_FW_LOADER_USER_HELPER=y
 CONFIG_FW_LOADER_COMPRESS=y
 CONFIG_FW_LOADER_COMPRESS_ZSTD=y
