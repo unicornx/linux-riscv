@@ -6,246 +6,196 @@
 #include <linux/module.h>
 #include <linux/msi.h>
 #include <linux/of.h>
+#include <linux/of_irq.h>
 #include <linux/of_platform.h>
 #include <linux/of_pci.h>
 #include <linux/platform_device.h>
 #include <linux/slab.h>
 
-#define MAX_IRQ_NUMBER 32
-
-/*
- * here we assume all plic hwirq and tic hwirq should
- * be contiguous.
- * topc_intc hwirq is index of bitmap (both software and
- * hardware), and starts from 0.
- * so we use tic hwirq as index to get plic hwirq and its
- * irq data.
- * when used as a msi parent, tic hwirq is written to Top
- * reg for triggering irq by a PCIe device.
- *
- * now we pre-requested plic interrupt, but may try request
- * plic interrupt when needed, like gicp_irq_domain_alloc.
- * see drivers/irqchip/irq-mvebu-gicp.c
- * FIXME: 我目前的理解是，gicp_irq_domain_alloc 中的做法是
- * 当 pcie device 申请 virq 时（也就是触发 .alloc 回调时）
- * 动态地将 hwirq 和 GIC 的 SPI# 关联起来，并设置到 parent 中
- * 这样 gicp_irq_chip 的 irq_chip 回调只要简单地设置为 irq_chip_XXXX_parent 就好了
- * 而现在 top-intc 中这个 parent 的调用全部是自己维护和调用，感觉可以优化
- */
-struct top_intc_data {
-	struct platform_device *pdev;
-	int irq_num;
-	struct irq_domain *domain;
-	struct irq_chip *chip;
-	int reg_bitwidth;
-
-	DECLARE_BITMAP(irq_bitmap, MAX_IRQ_NUMBER);
-	spinlock_t lock; // FIXME: mutex?
-
+struct pch_msi_data {
 	void __iomem *reg_sta; /* status reg, see TRM, 10.1.31, GP_INTR_REGISTER_0 */
 	void __iomem *reg_set; /* set reg, see TRM, 10.1.32, GP_INTR0_SET */
 	void __iomem *reg_clr; /* clear reg, see TRM, 10.1.33, GP_INTR0_CLR */
 
-	phys_addr_t reg_set_phys; /* MSI physical address */
+	int reg_bitwidth;
 
-	irq_hw_number_t plic_hwirqs[MAX_IRQ_NUMBER];
-	int plic_irqs[MAX_IRQ_NUMBER];
-	struct irq_data *plic_irq_datas[MAX_IRQ_NUMBER];
-	int tic_to_plic[MAX_IRQ_NUMBER]; /* mapping from tic hwirq to plic hwirq */
+	struct mutex	msi_map_lock;
+	phys_addr_t	doorbell;
+	u32		irq_first;	/* The vector number that MSIs starts */
+	u32		num_irqs;	/* The number of vectors for MSIs */
+	unsigned long	*msi_map;
 };
 
-static int top_intc_domain_alloc(struct irq_domain *domain,
-				unsigned int virq, unsigned int nr_irqs,
-				void *args)
+static int pch_msi_allocate_hwirq(struct pch_msi_data *priv, int num_req)
 {
-	unsigned long flags;
-	irq_hw_number_t hwirq;
-	int i, ret = -1;
-	struct top_intc_data *data = domain->host_data;
+	int first;
 
-	spin_lock_irqsave(&data->lock, flags);
-	ret = bitmap_find_free_region(data->irq_bitmap, data->irq_num,
-				      order_base_2(nr_irqs));
-	spin_unlock_irqrestore(&data->lock, flags);
+	mutex_lock(&priv->msi_map_lock);
 
-	if (ret < 0) {
-		pr_err("%s failed to alloc irq %d, total %d\n", __func__, virq, nr_irqs);
+	first = bitmap_find_free_region(priv->msi_map, priv->num_irqs,
+					get_count_order(num_req));
+	if (first < 0) {
+		mutex_unlock(&priv->msi_map_lock);
 		return -ENOSPC;
 	}
 
-	hwirq = ret;
-	for (i = 0; i < nr_irqs; i++) {
-		irq_domain_set_info(domain, virq + i, hwirq + i,
-				    data->chip,
-				    data, handle_edge_irq,
-				    NULL, NULL);
-		data->tic_to_plic[hwirq + i] = data->plic_hwirqs[hwirq + i];
-	}
+	mutex_unlock(&priv->msi_map_lock);
 
-	pr_info("----> %s hwirq %ld, irq %d, plic irq %d, total %d\n",
-		__func__,
-		hwirq,
-		virq,
-		data->plic_irqs[hwirq],
-		nr_irqs);
-	//dump_stack();
-	return 0;
+	return priv->irq_first + first;
 }
 
-static void top_intc_domain_free(struct irq_domain *domain,
-				    unsigned int virq, unsigned int nr_irqs)
+static void pch_msi_free_hwirq(struct pch_msi_data *priv,
+				int hwirq, int num_req)
+{
+	int first = hwirq - priv->irq_first;
+
+	mutex_lock(&priv->msi_map_lock);
+	bitmap_release_region(priv->msi_map, first, get_count_order(num_req));
+	mutex_unlock(&priv->msi_map_lock);
+}
+
+static void pch_msi_ack(struct irq_data *d)
+{
+	struct pch_msi_data *data  = irq_data_get_irq_chip_data(d);
+	int bit_off = d->hwirq - data->irq_first;
+
+	writel(1 << bit_off, (unsigned int *)data->reg_clr);
+
+	//irq_chip_ack_parent(d);
+}
+
+static void pch_msi_compose_msi_msg(struct irq_data *data,
+				    struct msi_msg *msg)
+{
+	struct pch_msi_data *priv = irq_data_get_irq_chip_data(data);
+
+	msg->address_hi = upper_32_bits(priv->doorbell);
+	msg->address_lo = lower_32_bits(priv->doorbell);
+	msg->data = 1 << (data->hwirq - priv->irq_first);
+
+	pr_info("----> %s hwirq[%d]: address_hi[%#x], address_lo[%#x], data[%#x]\n",
+		__func__,
+		(int)data->hwirq, msg->address_hi, msg->address_lo, msg->data);
+}
+
+static struct irq_chip middle_irq_chip = {
+	.name			= "PCH MSI",
+	.irq_mask		= irq_chip_mask_parent,
+	.irq_unmask		= irq_chip_unmask_parent,
+	.irq_ack		= pch_msi_ack,
+	.irq_set_affinity	= irq_chip_set_affinity_parent,
+	.irq_compose_msi_msg	= pch_msi_compose_msi_msg,
+};
+
+static int pch_msi_parent_domain_alloc(struct irq_domain *domain,
+					unsigned int virq, int hwirq)
+{
+	struct irq_fwspec fwspec;
+
+	fwspec.fwnode = domain->parent->fwnode;
+	fwspec.param_count = 2;
+	fwspec.param[0] = hwirq;
+	fwspec.param[1] = IRQ_TYPE_EDGE_RISING;
+
+	return irq_domain_alloc_irqs_parent(domain, virq, 1, &fwspec);
+}
+
+static int pch_msi_middle_domain_alloc(struct irq_domain *domain,
+					   unsigned int virq,
+					   unsigned int nr_irqs, void *args)
+{
+	struct pch_msi_data *priv = domain->host_data;
+	int hwirq, err, i;
+
+	hwirq = pch_msi_allocate_hwirq(priv, nr_irqs);
+	if (hwirq < 0)
+		return hwirq;
+
+	for (i = 0; i < nr_irqs; i++) {
+		err = pch_msi_parent_domain_alloc(domain, virq + i, hwirq + i);
+		if (err)
+			goto err_hwirq;
+		
+		pr_info("----> pch_msi_middle_domain_alloc: virq[%d], hwirq[%d]\n",
+			virq + i, (int)hwirq + i);
+
+		//irq_domain_set_hwirq_and_chip(domain, virq + i, hwirq + i,
+		//			      &middle_irq_chip, priv);
+		irq_domain_set_info(domain, virq + i, hwirq + i,
+				    &middle_irq_chip, priv,
+				    handle_edge_irq, NULL, NULL);
+	}
+
+	return 0;
+
+err_hwirq:
+	pch_msi_free_hwirq(priv, hwirq, nr_irqs);
+	irq_domain_free_irqs_parent(domain, virq, i);
+
+	return err;
+}
+
+static void pch_msi_middle_domain_free(struct irq_domain *domain,
+					   unsigned int virq,
+					   unsigned int nr_irqs)
 {
 	struct irq_data *d = irq_domain_get_irq_data(domain, virq);
-	struct top_intc_data *data = irq_data_get_irq_chip_data(d);
-	unsigned long flags;
+	struct pch_msi_data *priv = irq_data_get_irq_chip_data(d);
 
-	pr_debug("%s hwirq %ld, irq %d, total %d\n", __func__, d->hwirq, virq, nr_irqs);
-
-	spin_lock_irqsave(&data->lock, flags);
-	bitmap_release_region(data->irq_bitmap, d->hwirq,
-				order_base_2(nr_irqs));
-	spin_unlock_irqrestore(&data->lock, flags);
+	irq_domain_free_irqs_parent(domain, virq, nr_irqs);
+	pch_msi_free_hwirq(priv, d->hwirq, nr_irqs);
 }
 
-static const struct irq_domain_ops top_intc_domain_ops = {
-	.alloc	= top_intc_domain_alloc,
-	.free	= top_intc_domain_free,
+static const struct irq_domain_ops pch_msi_middle_domain_ops = {
+	.alloc	= pch_msi_middle_domain_alloc,
+	.free	= pch_msi_middle_domain_free,
 };
 
-static void top_intc_ack_irq(struct irq_data *d)
+static int pch_msi_init_domains(struct pch_msi_data *priv,
+				struct device_node *node)
 {
-	struct top_intc_data *data  = irq_data_get_irq_chip_data(d);
-	int reg_off, bit_off;
-	struct irq_data *plic_irq_data = data->plic_irq_datas[d->hwirq];
+	struct irq_domain *plic_domain, *middle_domain;
+	struct device_node *plic_node;
+	struct fwnode_handle *fwnode = of_node_to_fwnode(node);
 
-	// FIXME: hwirq 是一个 [0, 32), reg_bitwidth 是 32，那么 reg_off 永远是 0？
-	// A: 可以优化
-	reg_off = d->hwirq / data->reg_bitwidth;
-	// 所以 bit_off 就等于 hwirq
-	bit_off = d->hwirq - data->reg_bitwidth * reg_off;
-	// reg_clr 本质上就是一个 32 位的寄存器
-	writel(1 << bit_off, (unsigned int *)data->reg_clr + reg_off);
-
-	pr_debug("%s %ld, parent %s/%ld\n", __func__, d->hwirq,
-		plic_irq_data->domain->name, plic_irq_data->hwirq);
-	if (plic_irq_data->chip->irq_ack)
-		plic_irq_data->chip->irq_ack(plic_irq_data);
-}
-
-static void top_intc_mask_irq(struct irq_data *d)
-{
-	struct top_intc_data *data  = irq_data_get_irq_chip_data(d);
-	struct irq_data *plic_irq_data = data->plic_irq_datas[d->hwirq];
-
-	pr_debug("%s %ld, parent %s/%ld\n", __func__, d->hwirq,
-		plic_irq_data->domain->name, plic_irq_data->hwirq);
-	if (plic_irq_data->chip->irq_mask)
-		plic_irq_data->chip->irq_mask(plic_irq_data);
-}
-
-static void top_intc_unmask_irq(struct irq_data *d)
-{
-	struct top_intc_data *data  = irq_data_get_irq_chip_data(d);
-	struct irq_data *plic_irq_data = data->plic_irq_datas[d->hwirq];
-
-	pr_debug("%s %ld, parent %s/%ld\n", __func__, d->hwirq,
-		plic_irq_data->domain->name, plic_irq_data->hwirq);
-	if (plic_irq_data->chip->irq_unmask)
-		plic_irq_data->chip->irq_unmask(plic_irq_data);
-}
-
-static void top_intc_setup_msi_msg(struct irq_data *d, struct msi_msg *msg)
-{
-	struct top_intc_data *data  = irq_data_get_irq_chip_data(d);
-
-	msg->address_lo = lower_32_bits(data->reg_set_phys);
-	msg->address_hi = upper_32_bits(data->reg_set_phys);
-	msg->data = 1 << d->hwirq;
-
-	pr_debug("%s msi#%d: address_hi %#x, address_lo %#x, data %#x\n", __func__,
-		(int)d->hwirq, msg->address_hi, msg->address_lo, msg->data);
-}
-
-static int top_intc_set_affinity(struct irq_data *d,
-				 const struct cpumask *mask, bool force)
-{
-	struct top_intc_data *data  = irq_data_get_irq_chip_data(d);
-	struct irq_data *plic_irq_data = data->plic_irq_datas[d->hwirq];
-
-	irq_data_update_effective_affinity(d, mask);
-	if (plic_irq_data->chip->irq_set_affinity)
-		return plic_irq_data->chip->irq_set_affinity(plic_irq_data, mask, force);
-	else
+	if (!of_find_property(node, "interrupt-parent", NULL)) {
+		pr_err("Can't find interrupt-parent!\n");
 		return -EINVAL;
-}
+	}
 
-static int top_intc_set_type(struct irq_data *d, u32 type)
-{
-	/*
-	 * dummy function, so __irq_set_trigger can continue to set
-	 * correct trigger type.
-	 */
+	plic_node = of_irq_find_parent(node);
+	if (!plic_node) {
+		pr_err("Failed to find the PLIC node!\n");
+		return -ENXIO;
+	}
+
+	plic_domain = irq_find_host(plic_node);
+	of_node_put(plic_node);
+	if (!plic_domain) {
+		pr_err("Failed to find the PLIC domain\n");
+		return -ENXIO;
+	}
+
+	middle_domain = irq_domain_create_hierarchy(plic_domain, 0, priv->num_irqs,
+						    fwnode,
+						    &pch_msi_middle_domain_ops,
+						    priv);
+	if (!middle_domain) {
+		pr_err("Failed to create the MSI middle domain\n");
+		return -ENOMEM;
+	}
+
 	return 0;
-}
-
-static struct irq_chip top_intc_irq_chip = {
-	.name = "PCIE MSI",
-	.irq_ack = top_intc_ack_irq,
-	.irq_mask = top_intc_mask_irq,
-	.irq_unmask = top_intc_unmask_irq,
-	.irq_compose_msi_msg = top_intc_setup_msi_msg,
-	.irq_set_affinity = top_intc_set_affinity,
-	.irq_set_type = top_intc_set_type,
-};
-
-static void top_intc_irq_handler(struct irq_desc *plic_desc)
-{
-	struct irq_chip *plic_chip = irq_desc_get_chip(plic_desc);
-	struct top_intc_data *data = irq_desc_get_handler_data(plic_desc);
-	irq_hw_number_t plic_hwirq = irq_desc_get_irq_data(plic_desc)->hwirq;
-	irq_hw_number_t top_intc_hwirq;
-	int top_intc_irq, i, ret;
-
-	chained_irq_enter(plic_chip, plic_desc);
-
-	for (i = 0; i < data->irq_num; i++) {
-		if (data->tic_to_plic[i] == plic_hwirq)
-			break;
-	}
-	if (i < data->irq_num) {
-		top_intc_hwirq = i;
-		top_intc_irq = irq_find_mapping(data->domain, top_intc_hwirq);
-		pr_debug("----> %s plic hwirq %ld, tic hwirq %ld, tic irq %d\n",
-			 __func__,
-			 plic_hwirq,
-			 top_intc_hwirq,
-			 top_intc_irq);
-		if (top_intc_irq)
-			ret = generic_handle_irq(top_intc_irq);
-		pr_debug("----> %s handled tic irq %d, %d\n",
-			 __func__, top_intc_irq, ret);
-	} else {
-		pr_debug("----> %s not found tic hwirq for plic hwirq %ld\n", __func__, plic_hwirq);
-		// workaround, ack unexpected(unregistered) interrupt
-		writel(1 << (plic_hwirq - data->plic_hwirqs[0]), data->reg_clr);
-	}
-
-	chained_irq_exit(plic_chip, plic_desc);
 }
 
 static int top_intc_probe(struct platform_device *pdev)
 {
-	struct fwnode_handle *fwnode = of_node_to_fwnode(pdev->dev.of_node);
-	struct top_intc_data *data;
+	struct pch_msi_data *data;
 	struct resource *res;
-	int i;
 
-	data = devm_kzalloc(&pdev->dev, sizeof(struct top_intc_data), GFP_KERNEL);
+	data = devm_kzalloc(&pdev->dev, sizeof(struct pch_msi_data), GFP_KERNEL);
 	if (!data)
 		return -ENOMEM;
-
-	data->pdev = pdev;
-	spin_lock_init(&data->lock);
 
 	if (device_property_read_u32(&pdev->dev, "reg-bitwidth", &data->reg_bitwidth))
 		data->reg_bitwidth = 32;
@@ -255,63 +205,31 @@ static int top_intc_probe(struct platform_device *pdev)
 		dev_err(&pdev->dev, "Failed to map status register\n");
 		return PTR_ERR(data->reg_sta);
 	}
+
 	res = platform_get_resource_byname(pdev, IORESOURCE_MEM, "set");
 	data->reg_set = devm_ioremap_resource(&pdev->dev, res);
 	if (IS_ERR(data->reg_set)) {
 		dev_err(&pdev->dev, "Failed map set register\n");
 		return PTR_ERR(data->reg_set);
 	}
-	data->reg_set_phys = res->start;
+	data->doorbell = res->start;
+
 	data->reg_clr = devm_platform_ioremap_resource_byname(pdev, "clr");
 	if (IS_ERR(data->reg_clr)) {
 		dev_err(&pdev->dev, "Failed to map clear register\n");
 		return PTR_ERR(data->reg_clr);
 	}
 
-	for (i = 0; i < ARRAY_SIZE(data->plic_hwirqs); i++) {
-		char msi_name[8];
-		int irq;
+	data->irq_first = 64;
+	data->num_irqs = 32;
 
-		snprintf(msi_name, ARRAY_SIZE(msi_name), "msi%d", i);
-		irq = platform_get_irq_byname_optional(pdev, msi_name);
-		if (irq == -ENXIO)
-			break;
-		if (irq < 0)
-			return dev_err_probe(&pdev->dev, irq,
-					     "Failed to parse MSI IRQ '%s'\n",
-					     msi_name);
+	mutex_init(&data->msi_map_lock);
 
-		data->plic_irqs[i] = irq;
-		data->plic_irq_datas[i] = irq_get_irq_data(irq);
-		data->plic_hwirqs[i] = data->plic_irq_datas[i]->hwirq;
-		dev_dbg(&pdev->dev, "----> %s[%d]: plic hwirq %ld, plic irq %d\n",
-			msi_name, i,
-			data->plic_hwirqs[i], data->plic_irqs[i]);
-	}
-	if (!i) {
-		dev_err(&pdev->dev, "No MSI IRQ provided!\n");
-		return -ENXIO;
-	}
-	data->irq_num = i;
+	data->msi_map = bitmap_zalloc(data->num_irqs, GFP_KERNEL);
+	if (!data->msi_map)
+		return -ENOMEM;
 
-	/* create MSI domain */
-	data->domain = irq_domain_create_linear(fwnode, data->irq_num,
-						&top_intc_domain_ops, data);
-	if (!data->domain) {
-		dev_err(&pdev->dev, "Failed to create IRQ doamin\n");
-		return -ENODEV;
-	}
-	irq_domain_update_bus_token(data->domain, DOMAIN_BUS_NEXUS);
-
-	data->chip = &top_intc_irq_chip;
-
-	for (i = 0; i < data->irq_num; i++)
-		irq_set_chained_handler_and_data(data->plic_irqs[i],
-						 top_intc_irq_handler, data);
-
-	platform_set_drvdata(pdev, data);
-
-	return 0;
+	return pch_msi_init_domains(data, pdev->dev.of_node);
 }
 
 static const struct of_device_id top_intc_of_match[] = {
