@@ -1,18 +1,25 @@
+// SPDX-License-Identifier: GPL-2.0
+/*
+ * SG2042 MSI Controller
+ *
+ * Copyright (C) 2024 Sophgo Technology Inc.
+ * Copyright (C) 2024 Chen Wang <unicorn_wang@outlook.com>
+ */
+
 #include <linux/io.h>
 #include <linux/irq.h>
 #include <linux/irqdomain.h>
-#include <linux/irqchip/chained_irq.h>
 #include <linux/kernel.h>
 #include <linux/module.h>
 #include <linux/msi.h>
 #include <linux/of.h>
 #include <linux/of_irq.h>
-#include <linux/of_platform.h>
 #include <linux/of_pci.h>
+#include <linux/of_platform.h>
 #include <linux/platform_device.h>
 #include <linux/slab.h>
 
-struct pch_msi_data {
+struct sg2042_msi_data {
 	void __iomem *reg_sta; /* status reg, see TRM, 10.1.31, GP_INTR_REGISTER_0 */
 	void __iomem *reg_set; /* set reg, see TRM, 10.1.32, GP_INTR0_SET */
 	void __iomem *reg_clr; /* clear reg, see TRM, 10.1.33, GP_INTR0_CLR */
@@ -26,7 +33,7 @@ struct pch_msi_data {
 	unsigned long	*msi_map;
 };
 
-static int pch_msi_allocate_hwirq(struct pch_msi_data *priv, int num_req)
+static int sg2042_msi_allocate_hwirq(struct sg2042_msi_data *priv, int num_req)
 {
 	int first;
 
@@ -44,8 +51,8 @@ static int pch_msi_allocate_hwirq(struct pch_msi_data *priv, int num_req)
 	return priv->irq_first + first;
 }
 
-static void pch_msi_free_hwirq(struct pch_msi_data *priv,
-				int hwirq, int num_req)
+static void sg2042_msi_free_hwirq(struct sg2042_msi_data *priv,
+				  int hwirq, int num_req)
 {
 	int first = hwirq - priv->irq_first;
 
@@ -54,9 +61,9 @@ static void pch_msi_free_hwirq(struct pch_msi_data *priv,
 	mutex_unlock(&priv->msi_map_lock);
 }
 
-static void pch_msi_ack(struct irq_data *d)
+static void sg2042_msi_irq_ack(struct irq_data *d)
 {
-	struct pch_msi_data *data  = irq_data_get_irq_chip_data(d);
+	struct sg2042_msi_data *data  = irq_data_get_irq_chip_data(d);
 	int bit_off = d->hwirq - data->irq_first;
 
 	writel(1 << bit_off, (unsigned int *)data->reg_clr);
@@ -64,33 +71,33 @@ static void pch_msi_ack(struct irq_data *d)
 	irq_chip_ack_parent(d);
 }
 
-static void pch_msi_compose_msi_msg(struct irq_data *data,
-				    struct msi_msg *msg)
+static void sg2042_msi_irq_compose_msi_msg(struct irq_data *data,
+					   struct msi_msg *msg)
 {
-	struct pch_msi_data *priv = irq_data_get_irq_chip_data(data);
+	struct sg2042_msi_data *priv = irq_data_get_irq_chip_data(data);
 
 	msg->address_hi = upper_32_bits(priv->doorbell);
 	msg->address_lo = lower_32_bits(priv->doorbell);
 	msg->data = 1 << (data->hwirq - priv->irq_first);
 
-	pr_info("----> %s hwirq[%d]: address_hi[%#x], address_lo[%#x], data[%#x]\n",
+	pr_debug("%s hwirq[%d]: address_hi[%#x], address_lo[%#x], data[%#x]\n",
 		__func__,
 		(int)data->hwirq, msg->address_hi, msg->address_lo, msg->data);
 }
 
-static struct irq_chip middle_irq_chip = {
+static struct irq_chip sg2942_msi_middle_irq_chip = {
 	.name			= "PCH MSI",
-	.irq_ack		= pch_msi_ack,
+	.irq_ack		= sg2042_msi_irq_ack,
 	.irq_mask		= irq_chip_mask_parent,
 	.irq_unmask		= irq_chip_unmask_parent,
 #ifdef CONFIG_SMP
 	.irq_set_affinity	= irq_chip_set_affinity_parent,
 #endif
-	.irq_compose_msi_msg	= pch_msi_compose_msi_msg,
+	.irq_compose_msi_msg	= sg2042_msi_irq_compose_msi_msg,
 };
 
-static int pch_msi_parent_domain_alloc(struct irq_domain *domain,
-					unsigned int virq, int hwirq)
+static int sg2042_msi_parent_domain_alloc(struct irq_domain *domain,
+					  unsigned int virq, int hwirq)
 {
 	struct irq_fwspec fwspec;
 	struct irq_data *d;
@@ -109,56 +116,56 @@ static int pch_msi_parent_domain_alloc(struct irq_domain *domain,
 	return d->chip->irq_set_type(d, IRQ_TYPE_EDGE_RISING);
 }
 
-static int pch_msi_middle_domain_alloc(struct irq_domain *domain,
-					   unsigned int virq,
-					   unsigned int nr_irqs, void *args)
+static int sg2042_msi_middle_domain_alloc(struct irq_domain *domain,
+					  unsigned int virq,
+					  unsigned int nr_irqs, void *args)
 {
-	struct pch_msi_data *priv = domain->host_data;
+	struct sg2042_msi_data *priv = domain->host_data;
 	int hwirq, err, i;
 
-	hwirq = pch_msi_allocate_hwirq(priv, nr_irqs);
+	hwirq = sg2042_msi_allocate_hwirq(priv, nr_irqs);
 	if (hwirq < 0)
 		return hwirq;
 
 	for (i = 0; i < nr_irqs; i++) {
-		err = pch_msi_parent_domain_alloc(domain, virq + i, hwirq + i);
+		err = sg2042_msi_parent_domain_alloc(domain, virq + i, hwirq + i);
 		if (err)
 			goto err_hwirq;
 		
-		pr_info("----> pch_msi_middle_domain_alloc: virq[%d], hwirq[%d]\n",
-			virq + i, (int)hwirq + i);
+		pr_debug("%s: virq[%d], hwirq[%d]\n",
+			 __func__,virq + i, (int)hwirq + i);
 
 		irq_domain_set_hwirq_and_chip(domain, virq + i, hwirq + i,
-					      &middle_irq_chip, priv);
+					      &sg2942_msi_middle_irq_chip, priv);
 	}
 
 	return 0;
 
 err_hwirq:
-	pch_msi_free_hwirq(priv, hwirq, nr_irqs);
+	sg2042_msi_free_hwirq(priv, hwirq, nr_irqs);
 	irq_domain_free_irqs_parent(domain, virq, i);
 
 	return err;
 }
 
-static void pch_msi_middle_domain_free(struct irq_domain *domain,
-					   unsigned int virq,
-					   unsigned int nr_irqs)
+static void sg2042_msi_middle_domain_free(struct irq_domain *domain,
+					  unsigned int virq,
+					  unsigned int nr_irqs)
 {
 	struct irq_data *d = irq_domain_get_irq_data(domain, virq);
-	struct pch_msi_data *priv = irq_data_get_irq_chip_data(d);
+	struct sg2042_msi_data *priv = irq_data_get_irq_chip_data(d);
 
 	irq_domain_free_irqs_parent(domain, virq, nr_irqs);
-	pch_msi_free_hwirq(priv, d->hwirq, nr_irqs);
+	sg2042_msi_free_hwirq(priv, d->hwirq, nr_irqs);
 }
 
 static const struct irq_domain_ops pch_msi_middle_domain_ops = {
-	.alloc	= pch_msi_middle_domain_alloc,
-	.free	= pch_msi_middle_domain_free,
+	.alloc	= sg2042_msi_middle_domain_alloc,
+	.free	= sg2042_msi_middle_domain_free,
 };
 
-static int pch_msi_init_domains(struct pch_msi_data *priv,
-				struct device_node *node)
+static int sg2042_msi_init_domains(struct sg2042_msi_data *priv,
+				   struct device_node *node)
 {
 	struct irq_domain *plic_domain, *middle_domain;
 	struct device_node *plic_node;
@@ -194,12 +201,12 @@ static int pch_msi_init_domains(struct pch_msi_data *priv,
 	return 0;
 }
 
-static int top_intc_probe(struct platform_device *pdev)
+static int sg2042_msi_probe(struct platform_device *pdev)
 {
-	struct pch_msi_data *data;
+	struct sg2042_msi_data *data;
 	struct resource *res;
 
-	data = devm_kzalloc(&pdev->dev, sizeof(struct pch_msi_data), GFP_KERNEL);
+	data = devm_kzalloc(&pdev->dev, sizeof(struct sg2042_msi_data), GFP_KERNEL);
 	if (!data)
 		return -ENOMEM;
 
@@ -235,19 +242,19 @@ static int top_intc_probe(struct platform_device *pdev)
 	if (!data->msi_map)
 		return -ENOMEM;
 
-	return pch_msi_init_domains(data, pdev->dev.of_node);
+	return sg2042_msi_init_domains(data, pdev->dev.of_node);
 }
 
-static const struct of_device_id top_intc_of_match[] = {
+static const struct of_device_id sg2042_msi_of_match[] = {
 	{ .compatible = "sophgo,top-intc" },
 	{}
 };
 
-static struct platform_driver top_intc_driver = {
+static struct platform_driver sg2042_msi_driver = {
 	.driver = {
 		.name = "sophgo,top-intc",
-		.of_match_table = of_match_ptr(top_intc_of_match),
+		.of_match_table = of_match_ptr(sg2042_msi_of_match),
 	},
-	.probe = top_intc_probe,
+	.probe = sg2042_msi_probe,
 };
-builtin_platform_driver(top_intc_driver);
+builtin_platform_driver(sg2042_msi_driver);
