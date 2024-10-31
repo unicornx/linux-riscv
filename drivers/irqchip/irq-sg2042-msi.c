@@ -83,7 +83,9 @@ static struct irq_chip middle_irq_chip = {
 	.irq_ack		= pch_msi_ack,
 	.irq_mask		= irq_chip_mask_parent,
 	.irq_unmask		= irq_chip_unmask_parent,
+#ifdef CONFIG_SMP
 	.irq_set_affinity	= irq_chip_set_affinity_parent,
+#endif
 	.irq_compose_msi_msg	= pch_msi_compose_msi_msg,
 };
 
