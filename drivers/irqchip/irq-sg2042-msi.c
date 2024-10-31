@@ -61,7 +61,7 @@ static void pch_msi_ack(struct irq_data *d)
 
 	writel(1 << bit_off, (unsigned int *)data->reg_clr);
 
-	//irq_chip_ack_parent(d);
+	irq_chip_ack_parent(d);
 }
 
 static void pch_msi_compose_msi_msg(struct irq_data *data,
@@ -80,9 +80,9 @@ static void pch_msi_compose_msi_msg(struct irq_data *data,
 
 static struct irq_chip middle_irq_chip = {
 	.name			= "PCH MSI",
+	.irq_ack		= pch_msi_ack,
 	.irq_mask		= irq_chip_mask_parent,
 	.irq_unmask		= irq_chip_unmask_parent,
-	.irq_ack		= pch_msi_ack,
 	.irq_set_affinity	= irq_chip_set_affinity_parent,
 	.irq_compose_msi_msg	= pch_msi_compose_msi_msg,
 };
@@ -91,13 +91,20 @@ static int pch_msi_parent_domain_alloc(struct irq_domain *domain,
 					unsigned int virq, int hwirq)
 {
 	struct irq_fwspec fwspec;
+	struct irq_data *d;
+	int ret;
 
 	fwspec.fwnode = domain->parent->fwnode;
 	fwspec.param_count = 2;
 	fwspec.param[0] = hwirq;
 	fwspec.param[1] = IRQ_TYPE_EDGE_RISING;
 
-	return irq_domain_alloc_irqs_parent(domain, virq, 1, &fwspec);
+	ret = irq_domain_alloc_irqs_parent(domain, virq, 1, &fwspec);
+	if (ret)
+		return ret;
+
+	d = irq_domain_get_irq_data(domain->parent, virq);
+	return d->chip->irq_set_type(d, IRQ_TYPE_EDGE_RISING);
 }
 
 static int pch_msi_middle_domain_alloc(struct irq_domain *domain,
@@ -119,11 +126,8 @@ static int pch_msi_middle_domain_alloc(struct irq_domain *domain,
 		pr_info("----> pch_msi_middle_domain_alloc: virq[%d], hwirq[%d]\n",
 			virq + i, (int)hwirq + i);
 
-		//irq_domain_set_hwirq_and_chip(domain, virq + i, hwirq + i,
-		//			      &middle_irq_chip, priv);
-		irq_domain_set_info(domain, virq + i, hwirq + i,
-				    &middle_irq_chip, priv,
-				    handle_edge_irq, NULL, NULL);
+		irq_domain_set_hwirq_and_chip(domain, virq + i, hwirq + i,
+					      &middle_irq_chip, priv);
 	}
 
 	return 0;
