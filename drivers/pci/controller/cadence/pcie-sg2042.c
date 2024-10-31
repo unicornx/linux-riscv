@@ -69,11 +69,6 @@ struct sg2042_pcie {
  * At the same time, bottom chip uses a chained handler to handle the controller's
  * MSI IRQ edge triggered.
  */
-static void sg2042_top_msi_irq_ack(struct irq_data *d)
-{
-	irq_chip_ack_parent(d);
-}
-
 static void sg2042_top_msi_irq_mask(struct irq_data *d)
 {
 	pci_msi_mask_irq(d);
@@ -88,7 +83,7 @@ static void sg2042_top_msi_irq_unmask(struct irq_data *d)
 
 static struct irq_chip sg2042_top_msi_chip = {
 	.name = "SG2042 PCIe MSI for top-intc",
-	.irq_ack = sg2042_top_msi_irq_ack,
+	.irq_ack = irq_chip_ack_parent,
 	.irq_mask = sg2042_top_msi_irq_mask,
 	.irq_unmask = sg2042_top_msi_irq_unmask,
 };
