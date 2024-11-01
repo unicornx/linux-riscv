@@ -53,10 +53,14 @@ struct sg2042_pcie {
 	u32 top_intc_used;
 
 	struct irq_domain *msi_domain;
+
 	int msi_irq;
-	dma_addr_t msi_data;
-	void *msi_page;
+
+	dma_addr_t msi_phys;
+	void *msi_virt;
+
 	u32 num_applied_vecs; /* number of applied vectors, used to speed up in ISR */
+
 	raw_spinlock_t lock;
 	DECLARE_BITMAP(msi_irq_in_use, MAX_MSI_IRQS);
 };
@@ -104,7 +108,7 @@ static irqreturn_t sg2042_pcie_handle_msi_irq(struct sg2042_pcie *pcie)
 
 	num_vectors = pcie->num_applied_vecs;
 	for (i = 0; i <= num_vectors; i++) {
-		status = readl((void *)(pcie->msi_page + i * BYTE_NUM_PER_MSI_VEC));
+		status = readl((void *)(pcie->msi_virt + i * BYTE_NUM_PER_MSI_VEC));
 		if (!status)
 			continue;
 
@@ -118,7 +122,7 @@ static irqreturn_t sg2042_pcie_handle_msi_irq(struct sg2042_pcie *pcie)
 						  pos);
 			pos++;
 		}
-		writel(0, ((void *)(pcie->msi_page) + i * BYTE_NUM_PER_MSI_VEC));
+		writel(0, ((void *)(pcie->msi_virt) + i * BYTE_NUM_PER_MSI_VEC));
 	}
 	return ret;
 }
@@ -126,10 +130,8 @@ static irqreturn_t sg2042_pcie_handle_msi_irq(struct sg2042_pcie *pcie)
 static void sg2042_pcie_chained_msi_isr(struct irq_desc *desc)
 {
 	struct irq_chip *chip = irq_desc_get_chip(desc);
+	u32 status, st_msi_in_bit, clr_msi_in_bit;
 	struct sg2042_pcie *pcie;
-	u32 status = 0;
-	u32 st_msi_in_bit = 0;
-	u32 clr_msi_in_bit = 0;
 
 	chained_irq_enter(chip, desc);
 
@@ -174,17 +176,14 @@ static void sg2042_pcie_msi_irq_compose_msi_msg(struct irq_data *d,
 {
 	struct sg2042_pcie *pcie = irq_data_get_irq_chip_data(d);
 	struct device *dev = pcie->cdns_pcie->dev;
-	u64 msi_target;
 
-	msi_target = (u64)pcie->msi_data;
-
-	msg->address_lo = lower_32_bits(msi_target) + BYTE_NUM_PER_MSI_VEC * d->hwirq;
-	msg->address_hi = upper_32_bits(msi_target);
+	msg->address_lo = lower_32_bits(pcie->msi_phys) + BYTE_NUM_PER_MSI_VEC * d->hwirq;
+	msg->address_hi = upper_32_bits(pcie->msi_phys);
 	msg->data = 1;
 
 	pcie->num_applied_vecs = d->hwirq;
 
-	dev_dbg(dev, "compose msi msg hwirq[%d] address_hi[%#x] address_lo[%#x]\n",
+	dev_info(dev, "compose msi msg hwirq[%d] address_hi[%#x] address_lo[%#x]\n",
 		(int)d->hwirq, msg->address_hi, msg->address_lo);
 }
 
@@ -312,37 +311,46 @@ static int sg2042_pcie_setup_msi_external(struct sg2042_pcie *pcie)
 static int sg2042_pcie_init_msi_data(struct sg2042_pcie *pcie)
 {
 	struct device *dev = pcie->cdns_pcie->dev;
-	u64 msi_target = 0;
-	u32 value = 0;
+	u32 value;
+	int ret;
 
 	// 初始化一把 lock，这把锁会用于 bitmap_find_free_region/bitmap_release_region
 	// FIMXE? why 需要这把锁？
 	raw_spin_lock_init(&pcie->lock);
 
-	// FIXME: 这里分配的空间大小要和 MAX_MSI_IRQS 关联起来
-	// 可以参考 drivers/pci/controller/pci-tegra.c 的 tegra_pcie_msi_setup
-	// 中如何限制分配物理地址在 32 位空间
-	pcie->msi_page = dma_alloc_coherent(dev, 2048, &pcie->msi_data,
-					  (GFP_KERNEL|GFP_DMA32|__GFP_ZERO));
-	if (!pcie->msi_page)
+	/*
+	 * Though the PCIe controller can address >32-bit address space, to
+	 * facilitate endpoints that support only 32-bit MSI target address,
+	 * the mask is set to 32-bit to make sure that MSI target address is
+	 * always a 32-bit address
+	 */
+	ret = dma_set_coherent_mask(dev, DMA_BIT_MASK(32));
+	if (ret < 0) {
+		dev_err(dev, "failed to set DMA coherent mask\n");
+		return ret;
+	}
+	pcie->msi_virt = dma_alloc_coherent(dev, BYTE_NUM_PER_MSI_VEC * MAX_MSI_IRQS,
+					    &pcie->msi_phys, GFP_KERNEL);
+	if (!pcie->msi_virt) {
+		dev_err(dev, "failed to allocate DMA memory for MSI\n");
 		return -ENOMEM;
+	}
 
-	/* Program the msi_data */
-	msi_target = (u64)pcie->msi_data;
+	/* Program the msi address and size */
 	if (pcie->link_id == 1) {
 		regmap_write(pcie->syscon, REG_LINK1_MSI_ADDR_LOW,
-				 lower_32_bits(msi_target));
+				 lower_32_bits(pcie->msi_phys));
 		regmap_write(pcie->syscon, REG_LINK1_MSI_ADDR_HIGH,
-				 upper_32_bits(msi_target));
+				 upper_32_bits(pcie->msi_phys));
 
 		regmap_read(pcie->syscon, REG_LINK1_MSI_ADDR_SIZE, &value);
 		value = (value & 0xffff0000) | MAX_MSI_IRQS;
 		regmap_write(pcie->syscon, REG_LINK1_MSI_ADDR_SIZE, value);
 	} else {
 		regmap_write(pcie->syscon, REG_LINK0_MSI_ADDR_LOW,
-				 lower_32_bits(msi_target));
+				 lower_32_bits(pcie->msi_phys));
 		regmap_write(pcie->syscon, REG_LINK0_MSI_ADDR_HIGH,
-				 upper_32_bits(msi_target));
+				 upper_32_bits(pcie->msi_phys));
 
 		regmap_read(pcie->syscon, REG_LINK0_MSI_ADDR_SIZE, &value);
 		value = (value & 0x0000ffff) | (MAX_MSI_IRQS << 16);
@@ -404,8 +412,8 @@ static void sg2042_pcie_free_msi(struct sg2042_pcie *pcie)
 	irq_domain_remove(pcie->msi_domain);
 	irq_domain_remove(pcie->msi_domain->parent);
 
-	if (pcie->msi_page)
-		dma_free_coherent(dev, 1024, pcie->msi_page, pcie->msi_data);
+	if (pcie->msi_virt)
+		dma_free_coherent(dev, 1024, pcie->msi_virt, pcie->msi_phys);
 
 }
 
