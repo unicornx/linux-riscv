@@ -404,17 +404,12 @@ static void sg2042_pcie_free_msi(struct sg2042_pcie *pcie)
 {
 	struct device *dev = pcie->cdns_pcie->dev;
 
-	if (pcie->msi_irq) {
-		irq_set_chained_handler(pcie->msi_irq, NULL);
-		irq_set_handler_data(pcie->msi_irq, NULL);
-	}
-
-	irq_domain_remove(pcie->msi_domain);
-	irq_domain_remove(pcie->msi_domain->parent);
+	if (pcie->msi_irq)
+		irq_set_chained_handler_and_data(pcie->msi_irq, NULL, NULL);
 
 	if (pcie->msi_virt)
-		dma_free_coherent(dev, 1024, pcie->msi_virt, pcie->msi_phys);
-
+		dma_free_coherent(dev, BYTE_NUM_PER_MSI_VEC * MAX_MSI_IRQS,
+				  pcie->msi_virt, pcie->msi_phys);
 }
 
 // FIMXE: what's this?
@@ -485,8 +480,10 @@ static int sg2042_pcie_probe(struct platform_device *pdev)
 		return -ENOMEM;
 
 	bridge = devm_pci_alloc_host_bridge(dev, sizeof(*rc));
-	if (!bridge)
+	if (!bridge) {
+		dev_err(dev, "Failed to alloc host bridge!\n");
 		return -ENOMEM;
+	}
 	bridge->ops = &sg2042_pcie_host_ops;
 
 	rc = pci_host_bridge_priv(bridge);
@@ -514,6 +511,7 @@ static int sg2042_pcie_probe(struct platform_device *pdev)
 	platform_set_drvdata(pdev, pcie);
 
 	pm_runtime_enable(dev);
+
 	ret = pm_runtime_get_sync(dev);
 	if (ret < 0) {
 		dev_err(dev, "pm_runtime_get_sync failed\n");
@@ -523,31 +521,33 @@ static int sg2042_pcie_probe(struct platform_device *pdev)
 	if (pcie->top_intc_used == 1) {
 		ret = sg2042_pcie_setup_msi_external(pcie);
 		if (ret < 0)
-			goto err_pcie_setup;
+			goto err_setup_msi;
 	} else {
 		ret = sg2042_pcie_setup_msi(pcie, pdev);
-		if (ret < 0)
-			goto err_sg2042_pcie_setup_msi;
+		if (ret < 0) {
+			goto err_setup_msi;
+		}
 	}
 
 	ret = cdns_pcie_init_phy(dev, cdns_pcie);
 	if (ret) {
-		dev_err(dev, "Failed to init phy\n");
-		goto err_get_sync;
+		dev_err(dev, "Failed to init phy!\n");
+		goto err_setup_msi;
 	}
 	
 	ret = cdns_pcie_host_setup(rc);
 	if (ret < 0) {
-		goto err_pcie_setup;
+		dev_err(dev, "Failed to setup host!\n");
+		goto err_host_setup;
 	}
 
 	return 0;
 
- err_sg2042_pcie_setup_msi:
-	sg2042_pcie_free_msi(pcie);
-
- err_pcie_setup:
+err_host_setup:
 	cdns_pcie_disable_phy(cdns_pcie);
+
+err_setup_msi:
+	sg2042_pcie_free_msi(pcie);
 
 err_get_sync:
 	pm_runtime_put(dev);
@@ -556,25 +556,27 @@ err_get_sync:
 	return ret;
 }
 
-// FIXME：参考 dw 的做法，在 remove/shutdown 时还有很多需要清理
 static void sg2042_pcie_shutdown(struct platform_device *pdev)
 {
 	struct sg2042_pcie *pcie = platform_get_drvdata(pdev);
 	struct cdns_pcie *cdns_pcie = pcie->cdns_pcie;
 	struct device *dev = &pdev->dev;
 
+	sg2042_pcie_free_msi(pcie);
+
 	cdns_pcie_disable_phy(cdns_pcie);
+
 	pm_runtime_put(dev);
 	pm_runtime_disable(dev);
 }
 
-static struct platform_driver cdns_pcie_host_driver = {
+static struct platform_driver sg2042_pcie_driver = {
 	.driver = {
-		.name	= "cdns-pcie-host",
-		.of_match_table = sg2042_pcie_of_match,
+		.name		= "sg2042-pcie",
+		.of_match_table	= sg2042_pcie_of_match,
 		.pm		= &cdns_pcie_pm_ops,
 	},
 	.probe		= sg2042_pcie_probe,
 	.shutdown	= sg2042_pcie_shutdown,
 };
-builtin_platform_driver(cdns_pcie_host_driver);
+builtin_platform_driver(sg2042_pcie_driver);
