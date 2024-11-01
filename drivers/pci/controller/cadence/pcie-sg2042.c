@@ -27,22 +27,21 @@
 #define MSI_DEF_NUM_VECTORS	MAX_MSI_IRQS
 #define BYTE_NUM_PER_MSI_VEC	4
 
-// mango sideband signals
-#define IRS_REG0804	0x0804
-#define IRS_REG080C	0x080C
-#define IRS_REG0810	0x0810
-#define IRS_REG085C	0x085C
-#define IRS_REG0860	0x0860
-#define IRS_REG0864	0x0864
-#define IRS_REG0868	0x0868
-#define IRS_REG086C	0x086C
+#define REG_CLEAR		0x0804
+#define REG_STATUS		0x0810
+#define REG_LINK1_MSI_ADDR_SIZE	0x080C
+#define REG_LINK0_MSI_ADDR_SIZE	0x085C
+#define REG_LINK0_MSI_ADDR_LOW	0x0860
+#define REG_LINK0_MSI_ADDR_HIGH	0x0864
+#define REG_LINK1_MSI_ADDR_LOW	0x0868
+#define REG_LINK1_MSI_ADDR_HIGH	0x086C
 
-#define IRS_REG0804_CLR_LINK0_MSI_IN_BIT	2
-#define IRS_REG0804_CLR_LINK1_MSI_IN_BIT	3
-#define IRS_REG0810_ST_LINK0_MSI_IN_BIT		2
-#define IRS_REG0810_ST_LINK1_MSI_IN_BIT		3
+#define REG_CLEAR_LINK0_BIT	2
+#define REG_CLEAR_LINK1_BIT	3
+#define REG_STATUS_LINK0_BIT	2
+#define REG_STATUS_LINK1_BIT	3
 
-#define CDNS_PLAT_CPU_TO_BUS_ADDR	0xCFFFFFFFFF
+#define SG2042_CDNS_PLAT_CPU_TO_BUS_ADDR	0xCFFFFFFFFF
 
 struct sg2042_pcie {
 	struct cdns_pcie *cdns_pcie;
@@ -62,87 +61,33 @@ struct sg2042_pcie {
 	DECLARE_BITMAP(msi_irq_in_use, MAX_MSI_IRQS);
 };
 
-/*
- * We use the usual two domain structure, the top one being a generic PCI/MSI
- * domain, the bottom one being SG2042-specific and handling the actual HW
- * interrupt allocation.
- * At the same time, bottom chip uses a chained handler to handle the controller's
- * MSI IRQ edge triggered.
- */
-static void sg2042_top_msi_irq_mask(struct irq_data *d)
+static void sg2042_msi_irq_mask_external(struct irq_data *d)
 {
 	pci_msi_mask_irq(d);
 	irq_chip_mask_parent(d);
 }
 
-static void sg2042_top_msi_irq_unmask(struct irq_data *d)
+static void sg2042_msi_irq_unmask_external(struct irq_data *d)
 {
 	pci_msi_unmask_irq(d);
 	irq_chip_unmask_parent(d);
 }
 
-static struct irq_chip sg2042_top_msi_chip = {
-	.name = "SG2042 PCIe MSI for top-intc",
+static struct irq_chip sg2042_pcie_msi_chip_external = {
+	.name = "SG2042 PCIe MSI External",
 	.irq_ack = irq_chip_ack_parent,
-	.irq_mask = sg2042_top_msi_irq_mask,
-	.irq_unmask = sg2042_top_msi_irq_unmask,
+	.irq_mask = sg2042_msi_irq_mask_external,
+	.irq_unmask = sg2042_msi_irq_unmask_external,
 };
 
-static struct msi_domain_info sg2042_top_msi_domain_info = {
+static struct msi_domain_info sg2042_pcie_msi_domain_info_external = {
 	.flags	= (MSI_FLAG_USE_DEF_DOM_OPS | MSI_FLAG_USE_DEF_CHIP_OPS),
-	.chip	= &sg2042_top_msi_chip,
+	.chip	= &sg2042_pcie_msi_chip_external,
 };
-
-static struct irq_domain *sg2042_pcie_get_parent_irq_domain(struct device *dev)
-{
-	struct device_node *np = dev->of_node;
-	struct device_node *parent;
-	struct irq_domain *domain;
-
-	if (!of_find_property(np, "interrupt-parent", NULL)) {
-		dev_err(dev, "Can't find interrupt-parent!\n");
-		return NULL;
-	}
-
-	parent = of_irq_find_parent(np);
-	if (!parent) {
-		dev_err(dev, "Can't find parent node!\n");
-		return ERR_PTR(-ENXIO);
-	}
-
-	domain = irq_find_host(parent);
-	of_node_put(parent);
-	if (!domain) {
-		dev_err(dev, "Can't find domain of interrupt-parent!\n");
-		return ERR_PTR(-ENXIO);
-	}
-
-	return domain;
-}
-
-static int sg2042_pcie_setup_top_intc(struct sg2042_pcie *pcie)
-{
-	struct device *dev = pcie->cdns_pcie->dev;
-	struct fwnode_handle *fwnode = of_node_to_fwnode(dev->of_node);
-	struct irq_domain *parent_domain = sg2042_pcie_get_parent_irq_domain(dev);
-
-	pcie->msi_domain = pci_msi_create_irq_domain(fwnode,
-						     &sg2042_top_msi_domain_info,
-						     parent_domain);
-
-	if (!pcie->msi_domain) {
-		dev_err(dev, "create msi irq domain failed\n");
-		return -ENODEV;
-	}
-
-	return 0;
-}
 
 static struct irq_chip sg2042_pcie_msi_chip = {
 	.name = "SG2042 PCIe MSI",
 	.irq_ack = irq_chip_ack_parent,
-	.irq_mask = pci_msi_mask_irq,
-	.irq_unmask = pci_msi_unmask_irq,
 };
 
 static struct msi_domain_info sg2042_pcie_msi_domain_info = {
@@ -190,24 +135,22 @@ static void sg2042_pcie_chained_msi_isr(struct irq_desc *desc)
 
 	pcie = irq_desc_get_handler_data(desc);
 	if (pcie->link_id == 1) {
-		st_msi_in_bit = IRS_REG0810_ST_LINK1_MSI_IN_BIT;
-		clr_msi_in_bit = IRS_REG0804_CLR_LINK1_MSI_IN_BIT;
+		st_msi_in_bit = REG_STATUS_LINK1_BIT;
+		clr_msi_in_bit = REG_CLEAR_LINK1_BIT;
 	} else {
-		st_msi_in_bit = IRS_REG0810_ST_LINK0_MSI_IN_BIT;
-		clr_msi_in_bit = IRS_REG0804_CLR_LINK0_MSI_IN_BIT;
+		st_msi_in_bit = REG_STATUS_LINK0_BIT;
+		clr_msi_in_bit = REG_CLEAR_LINK0_BIT;
 	}
 
-	regmap_read(pcie->syscon, IRS_REG0810, &status);
+	regmap_read(pcie->syscon, REG_STATUS, &status);
 	if ((status >> st_msi_in_bit) & 0x1) {
-		WARN_ON(!IS_ENABLED(CONFIG_PCI_MSI));
-
-		regmap_read(pcie->syscon, IRS_REG0804, &status);
+		regmap_read(pcie->syscon, REG_CLEAR, &status);
 		status |= ((u32)0x1 << clr_msi_in_bit);
-		regmap_write(pcie->syscon, IRS_REG0804, status);
+		regmap_write(pcie->syscon, REG_CLEAR, status);
 
-		/* need write 0 to reset, hardware will not reset automaticly */
+		/* need write 0 to reset, hardware can not reset automaticly */
 		status &= ~((u32)0x1 << clr_msi_in_bit);
-		regmap_write(pcie->syscon, IRS_REG0804, status);
+		regmap_write(pcie->syscon, REG_CLEAR, status);
 
 		sg2042_pcie_handle_msi_irq(pcie);
 	}
@@ -241,7 +184,7 @@ static void sg2042_pcie_msi_irq_compose_msi_msg(struct irq_data *d,
 
 	pcie->num_applied_vecs = d->hwirq;
 
-	dev_err(dev, "msi#%d address_hi %#x address_lo %#x\n",
+	dev_dbg(dev, "compose msi msg hwirq[%d] address_hi[%#x] address_lo[%#x]\n",
 		(int)d->hwirq, msg->address_hi, msg->address_lo);
 }
 
@@ -254,7 +197,7 @@ static void sg2042_pcie_msi_irq_dummy(struct irq_data *d)
 }
 
 static struct irq_chip sg2042_pcie_msi_bottom_chip = {
-	.name = "SG2042 PLIC-MSI translator",
+	.name = "SG2042 PCIe PLIC-MSI translator",
 	.irq_ack = sg2042_pcie_msi_irq_dummy,
 	.irq_compose_msi_msg = sg2042_pcie_msi_irq_compose_msi_msg,
 	.irq_set_affinity = sg2042_pcie_msi_irq_set_affinity,
@@ -308,28 +251,143 @@ static const struct irq_domain_ops sg2042_pcie_msi_domain_ops = {
 	.free	= sg2042_pcie_irq_domain_free,
 };
 
-static int sg2042_pcie_allocate_domains(struct sg2042_pcie *pcie)
+/*
+ * We use the usual two domain structure, the top one being a generic PCI/MSI
+ * domain, the bottom one being SG2042-specific and handling the actual HW
+ * interrupt allocation.
+ * At the same time, bottom chip uses a chained handler to handle the controller's
+ * MSI IRQ edge triggered.
+ */
+static int sg2042_pcie_create_msi_domain(struct sg2042_pcie *pcie,
+					 struct irq_domain *parent)
 {
 	struct device *dev = pcie->cdns_pcie->dev;
 	struct fwnode_handle *fwnode = of_node_to_fwnode(dev->of_node);
-	struct irq_domain *parent;
 
-	parent = irq_domain_create_linear(fwnode, MSI_DEF_NUM_VECTORS,
-					  &sg2042_pcie_msi_domain_ops, pcie);
-	if (!parent) {
+	if (pcie->top_intc_used)
+		pcie->msi_domain = pci_msi_create_irq_domain(fwnode,
+							     &sg2042_pcie_msi_domain_info_external,
+							     parent);
+	else
+		pcie->msi_domain = pci_msi_create_irq_domain(fwnode,
+							     &sg2042_pcie_msi_domain_info,
+							     parent);
+
+	if (!pcie->msi_domain) {
+		dev_err(dev, "Failed to create MSI domain\n");
+		return -ENOMEM;
+	}
+
+	return 0;
+}
+
+static int sg2042_pcie_setup_msi_external(struct sg2042_pcie *pcie)
+{
+	struct device *dev = pcie->cdns_pcie->dev;
+	struct device_node *np = dev->of_node;
+	struct irq_domain *parent_domain;
+	struct device_node *parent_np;
+
+	if (!of_find_property(np, "interrupt-parent", NULL)) {
+		dev_err(dev, "Can't find interrupt-parent!\n");
+		return -EINVAL;
+	}
+
+	parent_np = of_irq_find_parent(np);
+	if (!parent_np) {
+		dev_err(dev, "Can't find node of interrupt-parent!\n");
+		return -ENXIO;
+	}
+
+	parent_domain = irq_find_host(parent_np);
+	of_node_put(parent_np);
+	if (!parent_domain) {
+		dev_err(dev, "Can't find domain of interrupt-parent!\n");
+		return -ENXIO;
+	}
+
+	return sg2042_pcie_create_msi_domain(pcie, parent_domain);
+}
+
+static int sg2042_pcie_init_msi_data(struct sg2042_pcie *pcie)
+{
+	struct device *dev = pcie->cdns_pcie->dev;
+	u64 msi_target = 0;
+	u32 value = 0;
+
+	// 初始化一把 lock，这把锁会用于 bitmap_find_free_region/bitmap_release_region
+	// FIMXE? why 需要这把锁？
+	raw_spin_lock_init(&pcie->lock);
+
+	// FIXME: 这里分配的空间大小要和 MAX_MSI_IRQS 关联起来
+	// 可以参考 drivers/pci/controller/pci-tegra.c 的 tegra_pcie_msi_setup
+	// 中如何限制分配物理地址在 32 位空间
+	pcie->msi_page = dma_alloc_coherent(dev, 2048, &pcie->msi_data,
+					  (GFP_KERNEL|GFP_DMA32|__GFP_ZERO));
+	if (!pcie->msi_page)
+		return -ENOMEM;
+
+	/* Program the msi_data */
+	msi_target = (u64)pcie->msi_data;
+	if (pcie->link_id == 1) {
+		regmap_write(pcie->syscon, REG_LINK1_MSI_ADDR_LOW,
+				 lower_32_bits(msi_target));
+		regmap_write(pcie->syscon, REG_LINK1_MSI_ADDR_HIGH,
+				 upper_32_bits(msi_target));
+
+		regmap_read(pcie->syscon, REG_LINK1_MSI_ADDR_SIZE, &value);
+		value = (value & 0xffff0000) | MAX_MSI_IRQS;
+		regmap_write(pcie->syscon, REG_LINK1_MSI_ADDR_SIZE, value);
+	} else {
+		regmap_write(pcie->syscon, REG_LINK0_MSI_ADDR_LOW,
+				 lower_32_bits(msi_target));
+		regmap_write(pcie->syscon, REG_LINK0_MSI_ADDR_HIGH,
+				 upper_32_bits(msi_target));
+
+		regmap_read(pcie->syscon, REG_LINK0_MSI_ADDR_SIZE, &value);
+		value = (value & 0x0000ffff) | (MAX_MSI_IRQS << 16);
+		regmap_write(pcie->syscon, REG_LINK0_MSI_ADDR_SIZE, value);
+	}
+
+	return 0;
+}
+
+static int sg2042_pcie_setup_msi(struct sg2042_pcie *pcie, struct platform_device *pdev)
+{
+	struct device *dev = pcie->cdns_pcie->dev;
+	struct fwnode_handle *fwnode = of_node_to_fwnode(dev->of_node);
+	struct irq_domain *parent_domain;
+	int ret = 0;
+
+	parent_domain = irq_domain_create_linear(fwnode, MSI_DEF_NUM_VECTORS,
+						 &sg2042_pcie_msi_domain_ops, pcie);
+	if (!parent_domain) {
 		dev_err(dev, "Failed to create IRQ domain\n");
 		return -ENOMEM;
 	}
-	irq_domain_update_bus_token(parent, DOMAIN_BUS_NEXUS);
+	irq_domain_update_bus_token(parent_domain, DOMAIN_BUS_NEXUS);
 
-	pcie->msi_domain = pci_msi_create_irq_domain(fwnode,
-						     &sg2042_pcie_msi_domain_info,
-						     parent);
-	if (!pcie->msi_domain) {
-		dev_err(dev, "Failed to create MSI domain\n");
-		irq_domain_remove(parent);
-		return -ENOMEM;
+	ret = sg2042_pcie_create_msi_domain(pcie, parent_domain);
+	if (ret) {
+		irq_domain_remove(parent_domain);
+		return ret;
 	}
+
+	ret = sg2042_pcie_init_msi_data(pcie);
+	if (ret) {
+		dev_err(dev, "Failed to initialize msi data!\n");
+		return ret;
+	}
+
+	ret = platform_get_irq_byname(pdev, "msi");
+	if (ret <= 0) {
+		dev_err(dev, "failed to get MSI irq\n");
+		return ret;
+	}
+	pcie->msi_irq = ret;
+
+	irq_set_chained_handler_and_data(pcie->msi_irq,
+					 sg2042_pcie_chained_msi_isr, pcie);
 
 	return 0;
 }
@@ -351,89 +409,14 @@ static void sg2042_pcie_free_msi(struct sg2042_pcie *pcie)
 
 }
 
-static int sg2042_pcie_msi_init(struct sg2042_pcie *pcie)
-{
-	struct device *dev = pcie->cdns_pcie->dev;
-	u64 msi_target = 0;
-	u32 value = 0;
-
-	// FIXME: 这里分配的空间大小要和 MAX_MSI_IRQS 关联起来
-	// 可以参考 drivers/pci/controller/pci-tegra.c 的 tegra_pcie_msi_setup
-	// 中如何限制分配物理地址在 32 位空间
-	pcie->msi_page = dma_alloc_coherent(dev, 2048, &pcie->msi_data,
-					  (GFP_KERNEL|GFP_DMA32|__GFP_ZERO));
-	if (pcie->msi_page == NULL)
-		return -1;
-
-	dev_info(dev, "msi_data is 0x%llx\n", pcie->msi_data);
-	msi_target = (u64)pcie->msi_data;
-
-	if (pcie->link_id == 1) {
-		/* Program the msi_data */
-		regmap_write(pcie->syscon, IRS_REG0868,
-				 lower_32_bits(msi_target));
-		regmap_write(pcie->syscon, IRS_REG086C,
-				 upper_32_bits(msi_target));
-
-		regmap_read(pcie->syscon, IRS_REG080C, &value);
-		value = (value & 0xffff0000) | MAX_MSI_IRQS;
-		regmap_write(pcie->syscon, IRS_REG080C, value);
-	} else {
-		/* Program the msi_data */
-		regmap_write(pcie->syscon, IRS_REG0860,
-				 lower_32_bits(msi_target));
-		regmap_write(pcie->syscon, IRS_REG0864,
-				 upper_32_bits(msi_target));
-
-		regmap_read(pcie->syscon, IRS_REG085C, &value);
-		value = (value & 0x0000ffff) | (MAX_MSI_IRQS << 16);
-		regmap_write(pcie->syscon, IRS_REG085C, value);
-	}
-
-	return 0;
-}
-
-static int sg2042_pcie_setup_msi(struct sg2042_pcie *pcie, struct platform_device *pdev)
-{
-	struct device *dev = pcie->cdns_pcie->dev;
-	int ret = 0;
-
-	ret = sg2042_pcie_msi_init(pcie);
-	if (ret) {
-		dev_err(dev, "Failed to initialize msi!\n");
-		return ret;
-	}
-
-	ret = platform_get_irq_byname(pdev, "msi");
-	if (ret <= 0) {
-		dev_err(dev, "failed to get MSI irq\n");
-		return ret;
-	}
-	pcie->msi_irq = ret;
-
-	// 初始化一把 lock，这把锁会用于 bitmap_find_free_region/bitmap_release_region
-	// FIMXE? why 需要这把锁？
-	raw_spin_lock_init(&pcie->lock);
-
-	ret = sg2042_pcie_allocate_domains(pcie);
-	if (ret)
-		return ret;
-
-	if (pcie->msi_irq)
-		irq_set_chained_handler_and_data(pcie->msi_irq,
-						 sg2042_pcie_chained_msi_isr, pcie);
-
-	return 0;
-}
-
 // FIMXE: what's this?
-static u64 sg2042_pcie_cpu_addr_fixup(struct cdns_pcie *pcie, u64 cpu_addr)
+static u64 sg2042_cdns_pcie_cpu_addr_fixup(struct cdns_pcie *pcie, u64 cpu_addr)
 {
-	return cpu_addr & CDNS_PLAT_CPU_TO_BUS_ADDR;
+	return cpu_addr & SG2042_CDNS_PLAT_CPU_TO_BUS_ADDR;
 }
 
-static const struct cdns_pcie_ops sg2042_pcie_ops = {
-	.cpu_addr_fixup = sg2042_pcie_cpu_addr_fixup,
+static const struct cdns_pcie_ops sg2042_cdns_pcie_ops = {
+	.cpu_addr_fixup = sg2042_cdns_pcie_cpu_addr_fixup,
 };
 
 /*
@@ -474,7 +457,7 @@ static const struct of_device_id sg2042_pcie_of_match[] = {
 	{},
 };
 
-static int sg2042_pcie_host_probe(struct platform_device *pdev)
+static int sg2042_pcie_probe(struct platform_device *pdev)
 {
 	struct device *dev = &pdev->dev;
 	struct device_node *np = dev->of_node;
@@ -486,22 +469,22 @@ static int sg2042_pcie_host_probe(struct platform_device *pdev)
 	struct regmap *syscon;
 	int ret;
 
+	if (!IS_ENABLED(CONFIG_PCIE_CADENCE_HOST))
+		return -ENODEV;
+
 	pcie = devm_kzalloc(dev, sizeof(*pcie), GFP_KERNEL);
 	if (!pcie)
 		return -ENOMEM;
-
-	if (!IS_ENABLED(CONFIG_PCIE_CADENCE_HOST))
-		return -ENODEV;
 
 	bridge = devm_pci_alloc_host_bridge(dev, sizeof(*rc));
 	if (!bridge)
 		return -ENOMEM;
 	bridge->ops = &sg2042_pcie_host_ops;
-	rc = pci_host_bridge_priv(bridge);
 
+	rc = pci_host_bridge_priv(bridge);
 	cdns_pcie = &rc->pcie;
 	cdns_pcie->dev = dev;
-	cdns_pcie->ops = &sg2042_pcie_ops;
+	cdns_pcie->ops = &sg2042_cdns_pcie_ops;
 	pcie->cdns_pcie = cdns_pcie;
 
 	np_syscon = of_parse_phandle(np, "pcie-syscon", 0);
@@ -530,7 +513,7 @@ static int sg2042_pcie_host_probe(struct platform_device *pdev)
 	}
 
 	if (pcie->top_intc_used == 1) {
-		ret = sg2042_pcie_setup_top_intc(pcie);
+		ret = sg2042_pcie_setup_msi_external(pcie);
 		if (ret < 0)
 			goto err_pcie_setup;
 	} else {
@@ -566,7 +549,7 @@ err_get_sync:
 }
 
 // FIXME：参考 dw 的做法，在 remove/shutdown 时还有很多需要清理
-static void cdns_pcie_shutdown(struct platform_device *pdev)
+static void sg2042_pcie_shutdown(struct platform_device *pdev)
 {
 	struct sg2042_pcie *pcie = platform_get_drvdata(pdev);
 	struct cdns_pcie *cdns_pcie = pcie->cdns_pcie;
@@ -579,11 +562,11 @@ static void cdns_pcie_shutdown(struct platform_device *pdev)
 
 static struct platform_driver cdns_pcie_host_driver = {
 	.driver = {
-		.name = "cdns-pcie-host",
+		.name	= "cdns-pcie-host",
 		.of_match_table = sg2042_pcie_of_match,
-		.pm = &cdns_pcie_pm_ops,
+		.pm		= &cdns_pcie_pm_ops,
 	},
-	.probe = sg2042_pcie_host_probe,
-	.shutdown = cdns_pcie_shutdown,
+	.probe		= sg2042_pcie_probe,
+	.shutdown	= sg2042_pcie_shutdown,
 };
 builtin_platform_driver(cdns_pcie_host_driver);
