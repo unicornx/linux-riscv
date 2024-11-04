@@ -78,10 +78,10 @@ static void sg2042_msi_irq_unmask_external(struct irq_data *d)
 }
 
 static struct irq_chip sg2042_pcie_msi_chip_external = {
-	.name = "SG2042 PCIe MSI External",
-	.irq_ack = irq_chip_ack_parent,
-	.irq_mask = sg2042_msi_irq_mask_external,
-	.irq_unmask = sg2042_msi_irq_unmask_external,
+	.name		= "SG2042 PCIe MSI External",
+	.irq_ack	= irq_chip_ack_parent,
+	.irq_mask	= sg2042_msi_irq_mask_external,
+	.irq_unmask	= sg2042_msi_irq_unmask_external,
 };
 
 static struct msi_domain_info sg2042_pcie_msi_domain_info_external = {
@@ -99,65 +99,23 @@ static struct msi_domain_info sg2042_pcie_msi_domain_info = {
 	.chip	= &sg2042_pcie_msi_chip,
 };
 
-static irqreturn_t sg2042_pcie_handle_msi_irq(struct sg2042_pcie *pcie)
+static void sg2042_pcie_msi_clear_status(struct sg2042_pcie *pcie)
 {
-	u32 i, pos;
-	unsigned long val;
-	u32 status, num_vectors;
-	irqreturn_t ret = IRQ_NONE;
+	u32 status, clr_msi_in_bit;
 
-	num_vectors = pcie->num_applied_vecs;
-	for (i = 0; i <= num_vectors; i++) {
-		status = readl((void *)(pcie->msi_virt + i * BYTE_NUM_PER_MSI_VEC));
-		if (!status)
-			continue;
-
-		ret = IRQ_HANDLED;
-		val = status;
-		pos = 0;
-		while ((pos = find_next_bit(&val, MAX_MSI_IRQS_PER_CTRL,
-					    pos)) != MAX_MSI_IRQS_PER_CTRL) {
-			generic_handle_domain_irq(pcie->msi_domain->parent,
-						  (i * MAX_MSI_IRQS_PER_CTRL) +
-						  pos);
-			pos++;
-		}
-		writel(0, ((void *)(pcie->msi_virt) + i * BYTE_NUM_PER_MSI_VEC));
-	}
-	return ret;
-}
-
-static void sg2042_pcie_chained_msi_isr(struct irq_desc *desc)
-{
-	struct irq_chip *chip = irq_desc_get_chip(desc);
-	u32 status, st_msi_in_bit, clr_msi_in_bit;
-	struct sg2042_pcie *pcie;
-
-	chained_irq_enter(chip, desc);
-
-	pcie = irq_desc_get_handler_data(desc);
 	if (pcie->link_id == 1) {
-		st_msi_in_bit = REG_STATUS_LINK1_BIT;
 		clr_msi_in_bit = REG_CLEAR_LINK1_BIT;
 	} else {
-		st_msi_in_bit = REG_STATUS_LINK0_BIT;
 		clr_msi_in_bit = REG_CLEAR_LINK0_BIT;
 	}
 
-	regmap_read(pcie->syscon, REG_STATUS, &status);
-	if ((status >> st_msi_in_bit) & 0x1) {
-		regmap_read(pcie->syscon, REG_CLEAR, &status);
-		status |= ((u32)0x1 << clr_msi_in_bit);
-		regmap_write(pcie->syscon, REG_CLEAR, status);
+	regmap_read(pcie->syscon, REG_CLEAR, &status);
+	status |= ((u32)0x1 << clr_msi_in_bit);
+	regmap_write(pcie->syscon, REG_CLEAR, status);
 
-		/* need write 0 to reset, hardware can not reset automaticly */
-		status &= ~((u32)0x1 << clr_msi_in_bit);
-		regmap_write(pcie->syscon, REG_CLEAR, status);
-
-		sg2042_pcie_handle_msi_irq(pcie);
-	}
-
-	chained_irq_exit(chip, desc);
+	/* need write 0 to reset, hardware can not reset automaticly */
+	status &= ~((u32)0x1 << clr_msi_in_bit);
+	regmap_write(pcie->syscon, REG_CLEAR, status);
 }
 
 static int sg2042_pcie_msi_irq_set_affinity(struct irq_data *d,
@@ -186,19 +144,17 @@ static void sg2042_pcie_msi_irq_compose_msi_msg(struct irq_data *d,
 		(int)d->hwirq, msg->address_hi, msg->address_lo);
 }
 
-/*
- * FIXME: Just a dummy function to make handle_edge_irq happy
- * see kernel/irq/chip.c, handle_edge_irq will call irq_ack unconditionally
- */
-static void sg2042_pcie_msi_irq_dummy(struct irq_data *d)
+static void sg2042_pcie_msi_irq_ack(struct irq_data *d)
 {
+	struct sg2042_pcie *pcie = irq_data_get_irq_chip_data(d);
+	sg2042_pcie_msi_clear_status(pcie);
 }
 
 static struct irq_chip sg2042_pcie_msi_bottom_chip = {
-	.name = "SG2042 PCIe PLIC-MSI translator",
-	.irq_ack = sg2042_pcie_msi_irq_dummy,
-	.irq_compose_msi_msg = sg2042_pcie_msi_irq_compose_msi_msg,
-	.irq_set_affinity = sg2042_pcie_msi_irq_set_affinity,
+	.name			= "SG2042 PCIe PLIC-MSI translator",
+	.irq_ack		= sg2042_pcie_msi_irq_ack,
+	.irq_compose_msi_msg	= sg2042_pcie_msi_irq_compose_msi_msg,
+	.irq_set_affinity	= sg2042_pcie_msi_irq_set_affinity,
 };
 
 static int sg2042_pcie_irq_domain_alloc(struct irq_domain *domain,
@@ -359,6 +315,65 @@ static int sg2042_pcie_init_msi_data(struct sg2042_pcie *pcie)
 	return 0;
 }
 
+static irqreturn_t sg2042_pcie_msi_handle_irq(struct sg2042_pcie *pcie)
+{
+	u32 i, pos;
+	unsigned long val;
+	u32 status, num_vectors;
+	irqreturn_t ret = IRQ_NONE;
+
+	num_vectors = pcie->num_applied_vecs;
+	for (i = 0; i <= num_vectors; i++) {
+		status = readl((void *)(pcie->msi_virt + i * BYTE_NUM_PER_MSI_VEC));
+		if (!status)
+			continue;
+
+		ret = IRQ_HANDLED;
+		val = status;
+		pos = 0;
+		while ((pos = find_next_bit(&val, MAX_MSI_IRQS_PER_CTRL,
+					    pos)) != MAX_MSI_IRQS_PER_CTRL) {
+			generic_handle_domain_irq(pcie->msi_domain->parent,
+						  (i * MAX_MSI_IRQS_PER_CTRL) +
+						  pos);
+			pos++;
+		}
+		writel(0, ((void *)(pcie->msi_virt) + i * BYTE_NUM_PER_MSI_VEC));
+	}
+	return ret;
+}
+
+static void sg2042_pcie_msi_chained_isr(struct irq_desc *desc)
+{
+	struct irq_chip *chip = irq_desc_get_chip(desc);
+	u32 status, st_msi_in_bit;
+	struct sg2042_pcie *pcie;
+
+	chained_irq_enter(chip, desc);
+
+	pcie = irq_desc_get_handler_data(desc);
+	if (pcie->link_id == 1) {
+		st_msi_in_bit = REG_STATUS_LINK1_BIT;
+	} else {
+		st_msi_in_bit = REG_STATUS_LINK0_BIT;
+	}
+
+	regmap_read(pcie->syscon, REG_STATUS, &status);
+	if ((status >> st_msi_in_bit) & 0x1) {
+		/* The MSI interrupt controller inside PCIE is defective.
+		 * Sometimes, the interrupt is reported but the status cannot
+		 * be read by reading msi_virt (MSI data). This causes the
+		 * processing in irq_ack can not be executed, so we force a
+		 * clear here.
+		 */
+		sg2042_pcie_msi_clear_status(pcie);
+
+		sg2042_pcie_msi_handle_irq(pcie);
+	}
+
+	chained_irq_exit(chip, desc);
+}
+
 static int sg2042_pcie_setup_msi(struct sg2042_pcie *pcie, struct platform_device *pdev)
 {
 	struct device *dev = pcie->cdns_pcie->dev;
@@ -394,7 +409,7 @@ static int sg2042_pcie_setup_msi(struct sg2042_pcie *pcie, struct platform_devic
 	pcie->msi_irq = ret;
 
 	irq_set_chained_handler_and_data(pcie->msi_irq,
-					 sg2042_pcie_chained_msi_isr, pcie);
+					 sg2042_pcie_msi_chained_isr, pcie);
 
 	return 0;
 }
