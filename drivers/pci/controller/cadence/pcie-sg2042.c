@@ -160,14 +160,13 @@ static void sg2042_pcie_chained_msi_isr(struct irq_desc *desc)
 	chained_irq_exit(chip, desc);
 }
 
-/*
- * FIXME: when CONFIG_SMP enabled, this callback will be triggered
- * now just return error to discard, but may need code to handle this
- */
 static int sg2042_pcie_msi_irq_set_affinity(struct irq_data *d,
 					    const struct cpumask *mask,
 					    bool force)
 {
+	if (d->parent_data)
+		return irq_chip_set_affinity_parent(d, mask, force);
+
 	return -EINVAL;
 }
 
