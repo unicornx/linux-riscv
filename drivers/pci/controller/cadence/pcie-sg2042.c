@@ -48,7 +48,6 @@ struct sg2042_pcie {
 
 	struct regmap *syscon;
 
-	u32 pcie_id; // FIXME dts 设置了，但是代码中用不到
 	u32 link_id;
 	u32 top_intc_used;
 
@@ -65,13 +64,13 @@ struct sg2042_pcie {
 	DECLARE_BITMAP(msi_irq_in_use, MAX_MSI_IRQS);
 };
 
-static void sg2042_msi_irq_mask_external(struct irq_data *d)
+static void sg2042_pcie_msi_irq_mask_external(struct irq_data *d)
 {
 	pci_msi_mask_irq(d);
 	irq_chip_mask_parent(d);
 }
 
-static void sg2042_msi_irq_unmask_external(struct irq_data *d)
+static void sg2042_pcie_msi_irq_unmask_external(struct irq_data *d)
 {
 	pci_msi_unmask_irq(d);
 	irq_chip_unmask_parent(d);
@@ -80,8 +79,8 @@ static void sg2042_msi_irq_unmask_external(struct irq_data *d)
 static struct irq_chip sg2042_pcie_msi_chip_external = {
 	.name		= "SG2042 PCIe MSI External",
 	.irq_ack	= irq_chip_ack_parent,
-	.irq_mask	= sg2042_msi_irq_mask_external,
-	.irq_unmask	= sg2042_msi_irq_unmask_external,
+	.irq_mask	= sg2042_pcie_msi_irq_mask_external,
+	.irq_unmask	= sg2042_pcie_msi_irq_unmask_external,
 };
 
 static struct msi_domain_info sg2042_pcie_msi_domain_info_external = {
@@ -269,8 +268,6 @@ static int sg2042_pcie_init_msi_data(struct sg2042_pcie *pcie)
 	u32 value;
 	int ret;
 
-	// 初始化一把 lock，这把锁会用于 bitmap_find_free_region/bitmap_release_region
-	// FIMXE? why 需要这把锁？
 	raw_spin_lock_init(&pcie->lock);
 
 	/*
@@ -518,7 +515,6 @@ static int sg2042_pcie_probe(struct platform_device *pdev)
 	}
 	pcie->syscon = syscon;
 
-	of_property_read_u32(np, "pcie-id", &pcie->pcie_id);
 	of_property_read_u32(np, "link-id", &pcie->link_id);
 	of_property_read_u32(np, "top-intc-used", &pcie->top_intc_used);
 
