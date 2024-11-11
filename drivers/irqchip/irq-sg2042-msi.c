@@ -21,7 +21,8 @@
 
 struct sg2042_msi_data {
 	void __iomem	*reg_clr; /* clear reg, see TRM, 10.1.33, GP_INTR0_CLR */
-	phys_addr_t	reg_set;  /* set reg, see TRM, 10.1.32, GP_INTR0_SET */
+
+	phys_addr_t	doorbell_addr; /* see TRM, 10.1.32, GP_INTR0_SET */
 
 	u32		irq_first; /* The vector number that MSIs starts */
 	u32		num_irqs;  /* The number of vectors for MSIs */
@@ -73,8 +74,8 @@ static void sg2042_msi_irq_compose_msi_msg(struct irq_data *data,
 {
 	struct sg2042_msi_data *priv = irq_data_get_irq_chip_data(data);
 
-	msg->address_hi = upper_32_bits(priv->reg_set);
-	msg->address_lo = lower_32_bits(priv->reg_set);
+	msg->address_hi = upper_32_bits(priv->doorbell_addr);
+	msg->address_lo = lower_32_bits(priv->doorbell_addr);
 	msg->data = 1 << (data->hwirq - priv->irq_first);
 
 	pr_debug("%s hwirq[%d]: address_hi[%#x], address_lo[%#x], data[%#x]\n",
@@ -201,23 +202,21 @@ static int sg2042_msi_init_domains(struct sg2042_msi_data *priv,
 static int sg2042_msi_probe(struct platform_device *pdev)
 {
 	struct sg2042_msi_data *data;
-	struct resource *res;
 
 	data = devm_kzalloc(&pdev->dev, sizeof(struct sg2042_msi_data), GFP_KERNEL);
 	if (!data)
 		return -ENOMEM;
 
-	res = platform_get_resource_byname(pdev, IORESOURCE_MEM, "set");
-	if (!res) {
-		dev_err(&pdev->dev, "Failed get resource from set\n");
-		return -EINVAL;
-	}
-	data->reg_set = res->start;
-
 	data->reg_clr = devm_platform_ioremap_resource_byname(pdev, "clr");
 	if (IS_ERR(data->reg_clr)) {
 		dev_err(&pdev->dev, "Failed to map clear register\n");
 		return PTR_ERR(data->reg_clr);
+	}
+
+	if (of_property_read_u64(pdev->dev.of_node, "sophgo,msi-doorbell-addr",
+				 &data->doorbell_addr)) {
+		dev_err(&pdev->dev, "Unable to parse MSI doorbell addr\n");
+		return -EINVAL;
 	}
 
 	if (of_property_read_u32(pdev->dev.of_node, "sophgo,msi-base-vec",
