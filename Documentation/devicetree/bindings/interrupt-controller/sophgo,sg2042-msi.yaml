@@ -23,13 +23,16 @@ properties:
 
   reg:
     items:
-      - description: set register
       - description: clear register
 
   reg-names:
     items:
-      - const: set
       - const: clr
+
+  sophgo,msi-doorbell-addr:
+    description:
+      u64 value of the MSI doorbell address
+    $ref: /schemas/types.yaml#/definitions/uint64
 
   sophgo,msi-base-vec:
     description:
@@ -54,6 +57,7 @@ required:
   - reg
   - reg-names
   - msi-controller
+  - sophgo,msi-doorbell-addr
   - sophgo,msi-base-vec
   - sophgo,msi-num-vecs
 
@@ -64,10 +68,10 @@ examples:
     #include <dt-bindings/interrupt-controller/irq.h>
     msi: msi-controller@30000000 {
       compatible = "sophgo,sg2042-msi";
-      reg = <0x30000000 0x4>,
-            <0x30000008 0x4>;
-      reg-names = "set", "clr";
+      reg = <0x30000000 0x4>;
+      reg-names = "clr";
       msi-controller;
+      sophgo,msi-doorbell-addr = <0x00000070 0x30010300>;
       sophgo,msi-base-vec = <64>;
       sophgo,msi-num-vecs = <32>;
       interrupt-parent = <&plic>;
