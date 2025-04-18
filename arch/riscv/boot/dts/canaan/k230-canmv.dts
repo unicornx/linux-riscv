@@ -13,6 +13,17 @@
 		stdout-path = "serial0:115200n8";
 	};
 
+	reserved-memory {
+		#address-cells = <2>;
+		#size-cells = <2>;
+		ranges;
+
+		rproc_ram: region@19000000 {
+			reg = <0x0 0x1f000000 0x0 0xfff000>;
+			no-map;
+		};
+	};
+
 	ddr: memory@0 {
 		device_type = "memory";
 		reg = <0x0 0x0 0x0 0x20000000>;
@@ -20,5 +31,12 @@
 };
 
 &uart0 {
+	status = "okay";
+};
+
+&rproc {
+	memory-region = <&rproc_ram>;
+	core-name = "cpu0";
+	firmware-name = "firmware.elf";
 	status = "okay";
 };

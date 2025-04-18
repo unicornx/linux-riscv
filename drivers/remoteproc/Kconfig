@@ -128,6 +128,15 @@ config DA8XX_REMOTEPROC
 	  It's safe to say n here if you're not interested in multimedia
 	  offloading.
 
+config CANAAN_K230_REMOTEPROC
+	tristate "Canaan K230 remoteproc support"
+	depends on ARCH_CANAAN || COMPILE_TEST
+	help
+	  Say y or m here to support Canaan K230 remote processors via the remote
+	  processor framework.
+
+	  It's safe to say N if not interested in using another core.
+
 config KEYSTONE_REMOTEPROC
 	tristate "Keystone Remoteproc support"
 	depends on ARCH_KEYSTONE

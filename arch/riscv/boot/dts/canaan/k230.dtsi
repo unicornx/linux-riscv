@@ -150,5 +150,11 @@
 			reg-shift = <2>;
 			status = "disabled";
 		};
+
+		rproc: remoteproc {
+			compatible = "canaan,k230-rproc";
+			resets = <&sysrst RST_CPU0>;
+			status = "disabled";
+		};
 	};
 };
