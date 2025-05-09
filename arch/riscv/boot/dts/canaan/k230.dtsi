@@ -96,6 +96,29 @@
 			#reset-cells = <1>;
 		};
 
+		sysrst-test {
+			compatible = "canaan,k230-rst-test";
+			resets = <&sysrst RST_SDIO0>,
+				 <&sysrst RST_USB0>,
+				 <&sysrst RST_USB1>,
+				 <&sysrst RST_SPI0>,
+				 <&sysrst RST_SPI1>,
+				 <&sysrst RST_SPI2>,
+				 <&sysrst RST_TIMER_APB>,
+				 <&sysrst RST_MAILBOX>,
+				 <&sysrst RST_UART1>,
+				 <&sysrst RST_UART2>,
+				 <&sysrst RST_UART3>,
+				 <&sysrst RST_UART4>,
+				 <&sysrst RST_I2C0>,
+				 <&sysrst RST_I2C1>,
+				 <&sysrst RST_I2C2>,
+				 <&sysrst RST_I2C3>,
+				 <&sysrst RST_I2C4>,
+				 <&sysrst RST_GPIO_APB>,
+				 <&sysrst RST_PWM_APB>;
+		};
+
 		uart0: serial@91400000 {
 			compatible = "snps,dw-apb-uart";
 			reg = <0x0 0x91400000 0x0 0x1000>;
