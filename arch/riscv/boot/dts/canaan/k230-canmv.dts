@@ -5,6 +5,9 @@
 
 #include "k230.dtsi"
 
+#include <dt-bindings/gpio/gpio.h>
+#include <dt-bindings/leds/common.h>
+
 / {
 	model = "Canaan CanMV-K230";
 	compatible = "canaan,canmv-k230", "canaan,kendryte-k230";
@@ -17,6 +20,15 @@
 		device_type = "memory";
 		reg = <0x0 0x0 0x0 0x20000000>;
 	};
+
+	leds {
+        	compatible = "gpio-leds";
+        	led-0 {
+			label = "Power LED";
+            		gpios = <&gpio1_ports 20 GPIO_ACTIVE_HIGH>;
+			default-state = "on";
+        	};
+    	};
 };
 
 &uart0 {
