@@ -138,5 +138,102 @@
 			reg-shift = <2>;
 			status = "disabled";
 		};
+
+		gpio0: gpio@9140b000 {
+			compatible = "snps,dw-apb-gpio";
+			reg = <0x0 0x9140b000 0x0 0x1000>;
+			#address-cells = <1>;
+			#size-cells = <0>;
+
+			port0a: gpio-controller@0 {
+				compatible = "snps,dw-apb-gpio-port";
+				gpio-controller;
+				#gpio-cells = <2>;
+				ngpios = <32>;
+				reg = <0>;
+				interrupt-controller;
+				#interrupt-cells = <2>;
+				interrupts = <32 IRQ_TYPE_EDGE_RISING>,
+					     <33 IRQ_TYPE_EDGE_RISING>,
+					     <34 IRQ_TYPE_EDGE_RISING>,
+					     <35 IRQ_TYPE_EDGE_RISING>,
+					     <36 IRQ_TYPE_EDGE_RISING>,
+					     <37 IRQ_TYPE_EDGE_RISING>,
+					     <38 IRQ_TYPE_EDGE_RISING>,
+					     <39 IRQ_TYPE_EDGE_RISING>,
+					     <40 IRQ_TYPE_EDGE_RISING>,
+					     <41 IRQ_TYPE_EDGE_RISING>,
+					     <42 IRQ_TYPE_EDGE_RISING>,
+					     <43 IRQ_TYPE_EDGE_RISING>,
+					     <44 IRQ_TYPE_EDGE_RISING>,
+					     <45 IRQ_TYPE_EDGE_RISING>,
+					     <46 IRQ_TYPE_EDGE_RISING>,
+					     <47 IRQ_TYPE_EDGE_RISING>,
+					     <48 IRQ_TYPE_EDGE_RISING>,
+					     <49 IRQ_TYPE_EDGE_RISING>,
+					     <50 IRQ_TYPE_EDGE_RISING>,
+					     <51 IRQ_TYPE_EDGE_RISING>,
+					     <52 IRQ_TYPE_EDGE_RISING>,
+					     <53 IRQ_TYPE_EDGE_RISING>,
+					     <54 IRQ_TYPE_EDGE_RISING>,
+					     <55 IRQ_TYPE_EDGE_RISING>,
+					     <56 IRQ_TYPE_EDGE_RISING>,
+					     <57 IRQ_TYPE_EDGE_RISING>,
+					     <58 IRQ_TYPE_EDGE_RISING>,
+					     <59 IRQ_TYPE_EDGE_RISING>,
+					     <60 IRQ_TYPE_EDGE_RISING>,
+					     <61 IRQ_TYPE_EDGE_RISING>,
+					     <62 IRQ_TYPE_EDGE_RISING>,
+					     <63 IRQ_TYPE_EDGE_RISING>;
+			};
+		};
+
+		gpio1: gpio@9140c000 {
+			compatible = "snps,dw-apb-gpio";
+			reg = <0x0 0x9140c000  0x0 0x1000>;
+			#address-cells = <1>;
+			#size-cells = <0>;
+			port1a: gpio-controller@0 {
+				compatible = "snps,dw-apb-gpio-port";
+				gpio-controller;
+				#gpio-cells = <2>;
+				ngpios = <32>;
+				reg = <0>;
+				interrupt-controller;
+				#interrupt-cells = <2>;
+				interrupts = <64 IRQ_TYPE_EDGE_RISING>,
+					     <65 IRQ_TYPE_EDGE_RISING>,
+					     <66 IRQ_TYPE_EDGE_RISING>,
+					     <67 IRQ_TYPE_EDGE_RISING>,
+					     <68 IRQ_TYPE_EDGE_RISING>,
+					     <69 IRQ_TYPE_EDGE_RISING>,
+					     <70 IRQ_TYPE_EDGE_RISING>,
+					     <71 IRQ_TYPE_EDGE_RISING>,
+					     <72 IRQ_TYPE_EDGE_RISING>,
+					     <73 IRQ_TYPE_EDGE_RISING>,
+					     <74 IRQ_TYPE_EDGE_RISING>,
+					     <75 IRQ_TYPE_EDGE_RISING>,
+					     <76 IRQ_TYPE_EDGE_RISING>,
+					     <77 IRQ_TYPE_EDGE_RISING>,
+					     <78 IRQ_TYPE_EDGE_RISING>,
+					     <79 IRQ_TYPE_EDGE_RISING>,
+					     <80 IRQ_TYPE_EDGE_RISING>,
+					     <81 IRQ_TYPE_EDGE_RISING>,
+					     <82 IRQ_TYPE_EDGE_RISING>,
+					     <83 IRQ_TYPE_EDGE_RISING>,
+					     <84 IRQ_TYPE_EDGE_RISING>,
+					     <85 IRQ_TYPE_EDGE_RISING>,
+					     <86 IRQ_TYPE_EDGE_RISING>,
+					     <87 IRQ_TYPE_EDGE_RISING>,
+					     <88 IRQ_TYPE_EDGE_RISING>,
+					     <89 IRQ_TYPE_EDGE_RISING>,
+					     <90 IRQ_TYPE_EDGE_RISING>,
+					     <91 IRQ_TYPE_EDGE_RISING>,
+					     <92 IRQ_TYPE_EDGE_RISING>,
+					     <93 IRQ_TYPE_EDGE_RISING>,
+					     <94 IRQ_TYPE_EDGE_RISING>,
+					     <95 IRQ_TYPE_EDGE_RISING>;
+			};
+		};
 	};
 };
