@@ -123,12 +123,12 @@
 		},								\
 	}
 
-#define K230_CLK_RATE_FORMAT_PDATA(_var,					\
-				   _mul_min, _mul_max, _mul_shift, _mul_mask,	\
-				   _div_min, _div_max, _div_shift, _div_mask,	\
-				   _reg, _bit, _method, _reg2,			\
-				   _read_only, _flags,				\
-				   _parent)					\
+#define K230_CLK_RATE_FORMAT_FWNAME(_var,					\
+				    _mul_min, _mul_max, _mul_shift, _mul_mask,	\
+				    _div_min, _div_max, _div_shift, _div_mask,	\
+				    _reg, _bit, _method, _reg2,			\
+				    _read_only, _flags,				\
+				    _parent)					\
 	static struct k230_clk_rate k230_##_var = {				\
 		.reg_off = _reg,						\
 		.reg_off2 = _reg2,						\
@@ -163,9 +163,9 @@
 		},								\
 	}
 
-#define K230_CLK_GATE_FORMAT_PDATA(_var,					\
-				   _reg, _bit, _flags, _gate_flags,		\
-				   _parent)					\
+#define K230_CLK_GATE_FORMAT_FWNAME(_var,					\
+				    _reg, _bit, _flags, _gate_flags,		\
+				    _parent)					\
 	static struct k230_clk_gate k230_##_var = {				\
 		.reg_off = _reg,						\
 		.clk = {							\
@@ -473,9 +473,9 @@ K230_CLK_RATE_FORMAT(cpu1_apb_rate,
 		     false, 0,
 		     cpu1_apb_gate);
 
-K230_CLK_GATE_FORMAT_PDATA(pmu_apb_gate,
-			   0x10, 0, 0, 0,
-			   "osc24m");
+K230_CLK_GATE_FORMAT_FWNAME(pmu_apb_gate,
+			    0x10, 0, 0, 0,
+			    "osc24m");
 
 K230_CLK_RATE_FORMAT(hs_hclk_high_src_rate,
 		     1, 1, 0, 0,
@@ -641,9 +641,9 @@ K230_CLK_RATE_FORMAT(hs_usb_ref_50m_rate,
 		     false, 0,
 		     pll0_div16);
 
-K230_CLK_GATE_FORMAT_PDATA(hs_sd_timer_src_gate,
-			   0x18, 12, 0, 0,
-			   "osc24m");
+K230_CLK_GATE_FORMAT_FWNAME(hs_sd_timer_src_gate,
+			    0x18, 12, 0, 0,
+			    "osc24m");
 
 K230_CLK_RATE_FORMAT(hs_sd_timer_src_rate,
 		     1, 1, 0, 0,
@@ -961,9 +961,9 @@ K230_CLK_GATE_FORMAT(ls_jamlink3co_gate,
 		     0x28, 3, 0, 0,
 		     ls_jamlinkco_src_rate);
 
-K230_CLK_GATE_FORMAT_PDATA(ls_gpio_debounce_gate,
-			   0x24, 27, 0, 0,
-			   "osc24m");
+K230_CLK_GATE_FORMAT_FWNAME(ls_gpio_debounce_gate,
+			    0x24, 27, 0, 0,
+			    "osc24m");
 
 K230_CLK_RATE_FORMAT(ls_gpio_debounce_rate,
 		     1, 1, 0, 0,
@@ -1016,16 +1016,16 @@ K230_CLK_RATE_FORMAT(sysctl_time_stamp_rate,
 		     false, 0,
 		     sysctl_time_stamp_gate);
 
-K230_CLK_RATE_FORMAT_PDATA(sysctl_temp_sensor_rate,
-			   1, 1, 0, 0,
-			   1, 256, 20, 0xFF,
-			   0x58, 31, div, 0x0,
-			   false, 0,
-			   "osc24m");
+K230_CLK_RATE_FORMAT_FWNAME(sysctl_temp_sensor_rate,
+			    1, 1, 0, 0,
+			    1, 256, 20, 0xFF,
+			    0x58, 31, div, 0x0,
+			    false, 0,
+			    "osc24m");
 
-K230_CLK_GATE_FORMAT_PDATA(sysctl_wdt0_gate,
-			   0x50, 4, 0, 0,
-			   "osc24m");
+K230_CLK_GATE_FORMAT_FWNAME(sysctl_wdt0_gate,
+			    0x50, 4, 0, 0,
+			    "osc24m");
 
 K230_CLK_RATE_FORMAT(sysctl_wdt0_rate,
 		     1, 1, 0, 0,
@@ -1034,9 +1034,9 @@ K230_CLK_RATE_FORMAT(sysctl_wdt0_rate,
 		     false, 0,
 		     sysctl_wdt0_gate);
 
-K230_CLK_GATE_FORMAT_PDATA(sysctl_wdt1_gate,
-			   0x50, 4, 0, 0,
-			   "osc24m");
+K230_CLK_GATE_FORMAT_FWNAME(sysctl_wdt1_gate,
+			    0x50, 4, 0, 0,
+			    "osc24m");
 
 K230_CLK_RATE_FORMAT(sysctl_wdt1_rate,
 		     1, 1, 0, 0,
@@ -1308,9 +1308,9 @@ K230_CLK_RATE_FORMAT(display_cfg_rate,
 		     false, 0,
 		     display_cfg_gate);
 
-K230_CLK_GATE_FORMAT_PDATA(display_ref_gate,
-			   0x74, 3, 0, 0,
-			   "osc24m");
+K230_CLK_GATE_FORMAT_FWNAME(display_ref_gate,
+			    0x74, 3, 0, 0,
+			    "osc24m");
 
 K230_CLK_GATE_FORMAT(vpu_src_gate,
 		     0xC, 0, 0, 0,
