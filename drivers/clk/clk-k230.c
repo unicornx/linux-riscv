@@ -97,18 +97,14 @@
 		.clk = {							\
 			.bit_idx = _bit,					\
 			.flags = _gate_flags,					\
-			.hw.init = CLK_HW_INIT_FW_NAME(#_var,		\
-				   _parent, &clk_gate_ops, _flags),	\
+			.hw.init = CLK_HW_INIT_FW_NAME(#_var,			\
+				   _parent, &clk_gate_ops, _flags),		\
 		},								\
 	}
 
-#define K230_CLK_MUX_FORMAT2(_var,						\
-			     _reg, _shift, _mask, _flags, _mux_flags,		\
-			     _pvar1, _pvar2)					\
-	static const struct clk_hw *k230_##_var##_phw[] = {			\
-		&k230_##_pvar1.clk.hw,						\
-		&k230_##_pvar2.clk.hw,						\
-	};									\
+#define K230_CLK_MUX_FORMAT(_var,						\
+			    _reg, _shift, _mask, _flags, _mux_flags,		\
+			    _parents)						\
 	static struct k230_clk_mux k230_##_var = {				\
 		.reg_off = _reg,						\
 		.clk = {							\
@@ -116,17 +112,13 @@
 			.shift = _shift,					\
 			.mask = _mask,						\
 			.hw.init = CLK_HW_INIT_PARENTS_HW(#_var,		\
-				   k230_##_var##_phw, &clk_mux_ops, _flags),	\
+				   _parents, &clk_mux_ops, _flags),		\
 		},								\
 	}
 
-#define K230_CLK_MUX_FORMAT2_PDATA(_var,					\
-				   _reg, _shift, _mask, _flags, _mux_flags,	\
-				   _index, _pvar)				\
-	static const struct clk_parent_data k230_##_var##_pdata[] = {		\
-		{ .index = _index, },						\
-		{ .hw = &k230_##_pvar.clk.hw},					\
-	};									\
+#define K230_CLK_MUX_FORMAT_PDATA(_var,						\
+				  _reg, _shift, _mask, _flags, _mux_flags,	\
+				  _parents)					\
 	static struct k230_clk_mux k230_##_var = {				\
 		.reg_off = _reg,						\
 		.clk = {							\
@@ -134,26 +126,7 @@
 			.shift = _shift,					\
 			.mask = _mask,						\
 			.hw.init = CLK_HW_INIT_PARENTS_DATA(#_var,		\
-				   k230_##_var##_pdata, &clk_mux_ops, _flags),	\
-		},								\
-	}
-
-#define K230_CLK_MUX_FORMAT3(_var,						\
-			     _reg, _shift, _mask, _flags, _mux_flags,		\
-			     _pvar1, _pvar2, _pvar3)				\
-	static const struct clk_hw *k230_##_var##_phw[] = {			\
-		&k230_##_pvar1.clk.hw,						\
-		&k230_##_pvar2.clk.hw,						\
-		&k230_##_pvar3.clk.hw,						\
-	};									\
-	static struct k230_clk_mux k230_##_var = {				\
-		.reg_off = _reg,						\
-		.clk = {							\
-			.flags = _mux_flags,					\
-			.shift = _shift,					\
-			.mask = _mask,						\
-			.hw.init = CLK_HW_INIT_PARENTS_HW(#_var,		\
-				   k230_##_var##_phw, &clk_mux_ops, _flags),	\
+				   _parents, &clk_mux_ops, _flags),		\
 		},								\
 	}
 
@@ -174,7 +147,7 @@
 		.clk = {							\
 			.mult = _mul,						\
 			.div = _div,						\
-			.hw.init = CLK_HW_INIT_HW(#_var,		\
+			.hw.init = CLK_HW_INIT_HW(#_var,			\
 				   &k230_##_parent.clk.hw, &clk_fixed_factor_ops,	\
 				   _flags),					\
 		},								\
@@ -200,8 +173,8 @@
 			.div_shift = _div_shift,				\
 			.div_mask = _div_mask,					\
 			.read_only = _read_only,				\
-			.hw.init = CLK_HW_INIT_HW(#_var,		\
-				   &k230_##_parent.clk.hw,				\
+			.hw.init = CLK_HW_INIT_HW(#_var,			\
+				   &k230_##_parent.clk.hw,			\
 				   &k230_clk_ops_##_method,			\
 				   _flags),					\
 		},								\
@@ -215,7 +188,7 @@
 		.clk = {							\
 			.bit_idx = _bit,					\
 			.flags = _gate_flags,					\
-			.hw.init = CLK_HW_INIT_HW(#_var,		\
+			.hw.init = CLK_HW_INIT_HW(#_var,			\
 				   &k230_##_parent.clk.hw, &clk_gate_ops, _flags),	\
 		},								\
 	}
@@ -235,7 +208,7 @@
 		.clk = {							\
 			.mult = 1,						\
 			.div = _div,						\
-			.hw.init = CLK_HW_INIT_HW(#_var,		\
+			.hw.init = CLK_HW_INIT_HW(#_var,			\
 				   &k230_##_parent.clk.hw, &clk_fixed_factor_ops,	\
 				   _flags),					\
 		},								\
@@ -450,10 +423,15 @@ K230_CLK_RATE_FORMAT(cpu0_apb_rate,
 		     false, 0,
 		     cpu0_apb_gate);
 
-K230_CLK_MUX_FORMAT3(cpu1_src_mux,
+static const struct clk_hw *k230_parents_cpu1_src_mux[] = {
+	&k230_pll0_div2.clk.hw,
+	&k230_pll3.clk.hw,
+	&k230_pll0.clk.hw,
+};
+K230_CLK_MUX_FORMAT(cpu1_src_mux,
 		     0x4, 1, 0x3,
 		     0, 0,
-		     pll0_div2, pll3, pll0);
+		    k230_parents_cpu1_src_mux);
 
 K230_CLK_GATE_FORMAT(cpu1_src_gate,
 		     0x4, 0, CLK_IGNORE_UNUSED, 0,
@@ -643,10 +621,14 @@ K230_CLK_GATE_FORMAT(hs_sd1_base_gate,
 		     0x18, 18, 0, 0,
 		     hs_sd_axi_src_rate);
 
-K230_CLK_MUX_FORMAT2(hs_ospi_src_mux,
+static const struct clk_hw *k230_parents_hs_ospi_src_mux[] = {
+	&k230_pll0_div2.clk.hw,
+	&k230_pll2_div4.clk.hw,
+};
+K230_CLK_MUX_FORMAT(hs_ospi_src_mux,
 		     0x20, 18, 0x1,
 		     0, 0,
-		     pll0_div2, pll2_div4);
+		     k230_parents_hs_ospi_src_mux);
 
 K230_CLK_GATE_FORMAT(hs_ospi_src_gate,
 		     0x18, 24, CLK_IGNORE_UNUSED, 0,
@@ -678,21 +660,27 @@ K230_CLK_GATE_FORMAT(hs_sd1_timer_gate,
 		     0x18, 20, 0, 0,
 		     hs_sd_timer_src_rate);
 
-K230_CLK_MUX_FORMAT2_PDATA(hs_usb0_ref_mux,
-			   0x18, 23, 0x1,
-			   0, 0,
-			   0,
-			   hs_usb_ref_50m_rate);
+static const struct clk_parent_data k230_parents_hs_usb0_ref_mux[] = {
+	{ .fw_name = "osc24m", },
+	{ .hw = &k230_hs_usb_ref_50m_rate.clk.hw },
+};
+K230_CLK_MUX_FORMAT_PDATA(hs_usb0_ref_mux,
+			  0x18, 23, 0x1,
+			  0, 0,
+			  k230_parents_hs_usb0_ref_mux);
 
 K230_CLK_GATE_FORMAT(hs_usb0_ref_gate,
 		     0x18, 21, CLK_IGNORE_UNUSED, 0,
 		     hs_usb0_ref_mux);
 
-K230_CLK_MUX_FORMAT2_PDATA(hs_usb1_ref_mux,
-			   0x18, 23, 0x1,
-			   0, 0,
-			   0,
-			   hs_usb_ref_50m_rate);
+static const struct clk_parent_data k230_parents_hs_usb1_ref_mux[] = {
+	{ .fw_name = "osc24m", },
+	{ .hw = &k230_hs_usb_ref_50m_rate.clk.hw },
+};
+K230_CLK_MUX_FORMAT_PDATA(hs_usb1_ref_mux,
+			  0x18, 23, 0x1,
+			  0, 0,
+			  k230_parents_hs_usb1_ref_mux);
 
 K230_CLK_GATE_FORMAT(hs_usb1_ref_gate,
 		     0x18, 22, CLK_IGNORE_UNUSED, 0,
@@ -1099,61 +1087,79 @@ K230_CLK_RATE_FORMAT(timer5_src_rate,
 		     false, 0,
 		     pll0_div16);
 
-K230_CLK_MUX_FORMAT2_PDATA(timer0_mux,
-			   0x50, 7, 0x1,
-			   0, 0,
-			   1,
-			   timer0_src_rate);
+static const struct clk_parent_data k230_parents_timer0_mux[] = {
+	{ .fw_name = "timer-pulse-in", },
+	{ .hw = &k230_timer0_src_rate.clk.hw },
+};
+K230_CLK_MUX_FORMAT_PDATA(timer0_mux,
+			  0x50, 7, 0x1,
+			  0, 0,
+			  k230_parents_timer0_mux);
 
 K230_CLK_GATE_FORMAT(timer0_gate,
 		     0x50, 13, CLK_IGNORE_UNUSED, 0,
 		     timer0_mux);
 
-K230_CLK_MUX_FORMAT2_PDATA(timer1_mux,
-			   0x50, 8, 0x1,
-			   0, 0,
-			   1,
-			   timer1_src_rate);
+static const struct clk_parent_data k230_parents_timer1_mux[] = {
+	{ .fw_name = "timer-pulse-in", },
+	{ .hw = &k230_timer1_src_rate.clk.hw },
+};
+K230_CLK_MUX_FORMAT_PDATA(timer1_mux,
+			  0x50, 8, 0x1,
+			  0, 0,
+			  k230_parents_timer1_mux);
 
 K230_CLK_GATE_FORMAT(timer1_gate,
 		     0x50, 14, CLK_IGNORE_UNUSED, 0,
 		     timer1_mux);
 
-K230_CLK_MUX_FORMAT2_PDATA(timer2_mux,
-			   0x50, 9, 0x1,
-			   0, 0,
-			   1,
-			   timer2_src_rate);
+static const struct clk_parent_data k230_parents_timer2_mux[] = {
+	{ .fw_name = "timer-pulse-in", },
+	{ .hw = &k230_timer2_src_rate.clk.hw },
+};
+K230_CLK_MUX_FORMAT_PDATA(timer2_mux,
+			  0x50, 9, 0x1,
+			  0, 0,
+			  k230_parents_timer2_mux);
 
 K230_CLK_GATE_FORMAT(timer2_gate,
 		     0x50, 15, CLK_IGNORE_UNUSED, 0,
 		     timer2_mux);
 
-K230_CLK_MUX_FORMAT2_PDATA(timer3_mux,
-			   0x50, 10, 0x1,
-			   0, 0,
-			   1,
-			   timer3_src_rate);
+static const struct clk_parent_data k230_parents_timer3_mux[] = {
+	{ .fw_name = "timer-pulse-in", },
+	{ .hw = &k230_timer3_src_rate.clk.hw },
+};
+K230_CLK_MUX_FORMAT_PDATA(timer3_mux,
+			  0x50, 10, 0x1,
+			  0, 0,
+			  k230_parents_timer3_mux);
 
 K230_CLK_GATE_FORMAT(timer3_gate,
 		     0x50, 16, CLK_IGNORE_UNUSED, 0,
 		     timer3_mux);
 
-K230_CLK_MUX_FORMAT2_PDATA(timer4_mux,
-			   0x50, 11, 0x1,
-			   0, 0,
-			   1,
-			   timer4_src_rate);
+static const struct clk_parent_data k230_parents_timer4_mux[] = {
+	{ .fw_name = "timer-pulse-in", },
+	{ .hw = &k230_timer4_src_rate.clk.hw },
+};
+K230_CLK_MUX_FORMAT_PDATA(timer4_mux,
+			  0x50, 11, 0x1,
+			  0, 0,
+			  k230_parents_timer4_mux);
 
 K230_CLK_GATE_FORMAT(timer4_gate,
 		     0x50, 17, CLK_IGNORE_UNUSED, 0,
 		     timer4_mux);
 
-K230_CLK_MUX_FORMAT2_PDATA(timer5_mux,
-			   0x50, 12, 0x1,
-			   0, 0,
-			   1,
-			   timer4_src_rate);
+static const struct clk_parent_data k230_parents_timer5_mux[] = {
+	{ .fw_name = "timer-pulse-in", },
+	{ .hw = &k230_timer5_src_rate.clk.hw },
+};
+K230_CLK_MUX_FORMAT_PDATA(timer5_mux,
+			  0x50, 12, 0x1,
+			  0, 0,
+			  k230_parents_timer5_mux);
 
 K230_CLK_GATE_FORMAT(timer5_gate,
 		     0x50, 18, CLK_IGNORE_UNUSED, 0,
@@ -1170,10 +1176,14 @@ K230_CLK_RATE_FORMAT(shrm_apb_rate,
 		     false, 0,
 		     shrm_apb_gate);
 
-K230_CLK_MUX_FORMAT2(shrm_sram_mux,
-		     0x50, 14, 0x1,
-		     0, 0,
-		     pll3_div2, pll0_div2);
+static const struct clk_hw *k230_parents_shrm_sram_mux[] = {
+	&k230_pll3_div2.clk.hw,
+	&k230_pll0_div2.clk.hw,
+};
+K230_CLK_MUX_FORMAT(shrm_sram_mux,
+		    0x50, 14, 0x1,
+		    0, 0,
+		    k230_parents_shrm_sram_mux);
 
 K230_CLK_GATE_FORMAT(shrm_sram_gate,
 		     0x5c, 10, CLK_IGNORE_UNUSED, 0,
@@ -1207,10 +1217,15 @@ K230_CLK_GATE_FORMAT(shrm_pdma_axi_gate,
 		     0x5C, 3, 0, 0,
 		     shrm_axi_gate);
 
-K230_CLK_MUX_FORMAT3(ddrc_src_mux,
-		     0x60, 0, 0x3,
-		     0, 0,
-		     pll0_div2, pll0_div3, pll2_div4);
+static const struct clk_hw *k230_parents_ddrc_src_mux[] = {
+	&k230_pll0_div2.clk.hw,
+	&k230_pll0_div3.clk.hw,
+	&k230_pll2_div4.clk.hw,
+};
+K230_CLK_MUX_FORMAT(ddrc_src_mux,
+		    0x60, 0, 0x3,
+		    0, 0,
+		    k230_parents_ddrc_src_mux);
 
 K230_CLK_GATE_FORMAT(ddrc_src_gate,
 		     0x60, 2, CLK_IGNORE_UNUSED, 0,
@@ -1411,10 +1426,14 @@ K230_CLK_RATE_FORMAT(spi2axi_rate,
 		     false, 0,
 		     spi2axi_gate);
 
-K230_CLK_MUX_FORMAT2(ai_src_mux,
-		     0x8, 2, 0x1,
-		     0, 0,
-		     pll0_div2, pll3_div2);
+static const struct clk_hw *k230_parents_ai_src_mux[] = {
+	&k230_pll0_div2.clk.hw,
+	&k230_pll3_div2.clk.hw,
+};
+K230_CLK_MUX_FORMAT(ai_src_mux,
+		    0x8, 2, 0x1,
+		    0, 0,
+		    k230_parents_ai_src_mux);
 
 K230_CLK_GATE_FORMAT(ai_src_gate,
 		     0x8, 0, CLK_IGNORE_UNUSED, 0,
@@ -1431,10 +1450,15 @@ K230_CLK_GATE_FORMAT(ai_axi_gate,
 		     0x8, 10, 0, 0,
 		     ai_src_rate);
 
-K230_CLK_MUX_FORMAT3(camera0_mux,
-		     0x6C, 3, 0x3,
-		     0, 0,
-		     pll1_div3, pll1_div4, pll0_div4);
+static const struct clk_hw *k230_parents_camera0_mux[] = {
+	&k230_pll1_div3.clk.hw,
+	&k230_pll1_div4.clk.hw,
+	&k230_pll0_div4.clk.hw,
+};
+K230_CLK_MUX_FORMAT(camera0_mux,
+		    0x6C, 3, 0x3,
+		    0, 0,
+		    k230_parents_camera0_mux);
 
 K230_CLK_GATE_FORMAT(camera0_gate,
 		     0x6C, 0, CLK_IGNORE_UNUSED, 0,
@@ -1447,10 +1471,15 @@ K230_CLK_RATE_FORMAT(camera0_rate,
 		     false, 0,
 		     camera0_gate);
 
-K230_CLK_MUX_FORMAT3(camera1_mux,
-		     0x6C, 10, 0x3,
-		     0, 0,
-		     pll1_div3, pll1_div4, pll0_div4);
+static const struct clk_hw *k230_parents_camera1_mux[] = {
+	&k230_pll1_div3.clk.hw,
+	&k230_pll1_div4.clk.hw,
+	&k230_pll0_div4.clk.hw,
+};
+K230_CLK_MUX_FORMAT(camera1_mux,
+		    0x6C, 10, 0x3,
+		    0, 0,
+		    k230_parents_camera1_mux);
 
 K230_CLK_GATE_FORMAT(camera1_gate,
 		     0x6C, 1, CLK_IGNORE_UNUSED, 0,
@@ -1463,10 +1492,15 @@ K230_CLK_RATE_FORMAT(camera1_rate,
 		     false, 0,
 		     camera1_gate);
 
-K230_CLK_MUX_FORMAT3(camera2_mux,
-		     0x6C, 17, 0x3,
-		     0, 0,
-		     pll1_div3, pll1_div4, pll0_div4);
+static const struct clk_hw *k230_parents_camera2_mux[] = {
+	&k230_pll1_div3.clk.hw,
+	&k230_pll1_div4.clk.hw,
+	&k230_pll0_div4.clk.hw,
+};
+K230_CLK_MUX_FORMAT(camera2_mux,
+		    0x6C, 17, 0x3,
+		    0, 0,
+		    k230_parents_camera2_mux);
 
 K230_CLK_GATE_FORMAT(camera2_gate,
 		     0x6C, 2, CLK_IGNORE_UNUSED, 0,
