@@ -62,20 +62,7 @@
 #define K230_PLLX_LOCK_ADDR(base, idx)						\
 	(K230_PLL_LOCK_REG_OFFSET + K230_PLLX_BASE(base, idx))
 
-#define K230_CLK_FIXED_FACTOR_FORMAT(_var,					\
-				     _mul, _div, _flags,			\
-				     _parent)					\
-	static struct k230_clk_fixed_factor k230_##_var = {			\
-		.clk = {							\
-			.mult = _mul,						\
-			.div = _div,						\
-			.hw.init = CLK_HW_INIT_HW(#_var,			\
-				   &k230_##_parent.clk.hw, &clk_fixed_factor_ops,	\
-				   _flags),					\
-		},								\
-	}
-
-#define K230_CLK_PLL_DIV_FORMAT(_var, _div, _flags, _parent)			\
+#define K230_CLK_FIXED_FACTOR_FORMAT(_var, _div, _flags, _parent)		\
 	static struct k230_clk_fixed_factor k230_##_var = {			\
 		.clk = {							\
 			.mult = 1,						\
@@ -347,19 +334,19 @@ struct k230_pll *k230_plls[] = {
 
 #define K230_PLL_NUM ARRAY_SIZE(k230_plls)
 
-K230_CLK_PLL_DIV_FORMAT(pll0_div2, 2, 0, pll0);
-K230_CLK_PLL_DIV_FORMAT(pll0_div3, 3, 0, pll0);
-K230_CLK_PLL_DIV_FORMAT(pll0_div4, 4, 0, pll0);
-K230_CLK_PLL_DIV_FORMAT(pll0_div16, 16, 0, pll0);
-K230_CLK_PLL_DIV_FORMAT(pll1_div2, 2, 0, pll1);
-K230_CLK_PLL_DIV_FORMAT(pll1_div3, 3, 0, pll1);
-K230_CLK_PLL_DIV_FORMAT(pll1_div4, 4, 0, pll1);
-K230_CLK_PLL_DIV_FORMAT(pll2_div2, 2, 0, pll2);
-K230_CLK_PLL_DIV_FORMAT(pll2_div3, 3, 0, pll2);
-K230_CLK_PLL_DIV_FORMAT(pll2_div4, 4, 0, pll2);
-K230_CLK_PLL_DIV_FORMAT(pll3_div2, 2, 0, pll3);
-K230_CLK_PLL_DIV_FORMAT(pll3_div3, 3, 0, pll3);
-K230_CLK_PLL_DIV_FORMAT(pll3_div4, 4, 0, pll3);
+K230_CLK_FIXED_FACTOR_FORMAT(pll0_div2, 2, 0, pll0);
+K230_CLK_FIXED_FACTOR_FORMAT(pll0_div3, 3, 0, pll0);
+K230_CLK_FIXED_FACTOR_FORMAT(pll0_div4, 4, 0, pll0);
+K230_CLK_FIXED_FACTOR_FORMAT(pll0_div16, 16, 0, pll0);
+K230_CLK_FIXED_FACTOR_FORMAT(pll1_div2, 2, 0, pll1);
+K230_CLK_FIXED_FACTOR_FORMAT(pll1_div3, 3, 0, pll1);
+K230_CLK_FIXED_FACTOR_FORMAT(pll1_div4, 4, 0, pll1);
+K230_CLK_FIXED_FACTOR_FORMAT(pll2_div2, 2, 0, pll2);
+K230_CLK_FIXED_FACTOR_FORMAT(pll2_div3, 3, 0, pll2);
+K230_CLK_FIXED_FACTOR_FORMAT(pll2_div4, 4, 0, pll2);
+K230_CLK_FIXED_FACTOR_FORMAT(pll3_div2, 2, 0, pll3);
+K230_CLK_FIXED_FACTOR_FORMAT(pll3_div3, 3, 0, pll3);
+K230_CLK_FIXED_FACTOR_FORMAT(pll3_div4, 4, 0, pll3);
 
 struct k230_clk_fixed_factor *k230_pll_divs[] = {
 	K230_FMT(pll0_div2),
@@ -1189,9 +1176,7 @@ K230_CLK_GATE_FORMAT(shrm_sram_gate,
 		     0x5c, 10, CLK_IGNORE_UNUSED, 0,
 		     shrm_sram_mux);
 
-K230_CLK_FIXED_FACTOR_FORMAT(shrm_sram_div2,
-			     1, 2, 0,
-			     shrm_sram_gate);
+K230_CLK_FIXED_FACTOR_FORMAT(shrm_sram_div2, 2, 0, shrm_sram_gate);
 
 K230_CLK_GATE_FORMAT(shrm_axi_slave_gate,
 		     0x5C, 11, CLK_IGNORE_UNUSED, 0,
