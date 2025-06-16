@@ -88,22 +88,20 @@
 	static struct k230_clk_rate k230_##_var = {				\
 		.reg_off = _reg,						\
 		.reg_off2 = _reg2,						\
-		.clk = {							\
-			.write_enable_bit = _bit,				\
-			.mul_min = _mul_min,					\
-			.mul_max = _mul_max,					\
-			.mul_shift = _mul_shift,				\
-			.mul_mask = _mul_mask,					\
-			.div_min = _div_min,					\
-			.div_max = _div_max,					\
-			.div_shift = _div_shift,				\
-			.div_mask = _div_mask,					\
-			.read_only = _read_only,				\
-			.hw.init = CLK_HW_INIT_HW(#_var,			\
-				   &k230_##_parent.hw,				\
-				   &k230_clk_ops_##_method,			\
-				   _flags),					\
-		},								\
+		.write_enable_bit = _bit,					\
+		.mul_min = _mul_min,						\
+		.mul_max = _mul_max,						\
+		.mul_shift = _mul_shift,					\
+		.mul_mask = _mul_mask,						\
+		.div_min = _div_min,						\
+		.div_max = _div_max,						\
+		.div_shift = _div_shift,					\
+		.div_mask = _div_mask,						\
+		.read_only = _read_only,					\
+		.hw.init = CLK_HW_INIT_HW(#_var,				\
+					  &k230_##_parent.hw,			\
+					  &k230_clk_ops_##_method,		\
+					  _flags),				\
 	}
 
 #define K230_CLK_RATE_FORMAT_FWNAME(_var,					\
@@ -115,22 +113,20 @@
 	static struct k230_clk_rate k230_##_var = {				\
 		.reg_off = _reg,						\
 		.reg_off2 = _reg2,						\
-		.clk = {							\
-			.write_enable_bit = _bit,				\
-			.mul_min = _mul_min,					\
-			.mul_max = _mul_max,					\
-			.mul_shift = _mul_shift,				\
-			.mul_mask = _mul_mask,					\
-			.div_min = _div_min,					\
-			.div_max = _div_max,					\
-			.div_shift = _div_shift,				\
-			.div_mask = _div_mask,					\
-			.read_only = _read_only,				\
-			.hw.init = CLK_HW_INIT_FW_NAME(#_var,			\
-				   _parent,					\
-				   &k230_clk_ops_##_method,			\
-				   _flags),					\
-		},								\
+		.write_enable_bit = _bit,					\
+		.mul_min = _mul_min,						\
+		.mul_max = _mul_max,						\
+		.mul_shift = _mul_shift,					\
+		.mul_mask = _mul_mask,						\
+		.div_min = _div_min,						\
+		.div_max = _div_max,						\
+		.div_shift = _div_shift,					\
+		.div_mask = _div_mask,						\
+		.read_only = _read_only,					\
+		.hw.init = CLK_HW_INIT_FW_NAME(#_var,				\
+					       _parent,				\
+					       &k230_clk_ops_##_method,		\
+					       _flags),				\
 	}
 
 #define K230_CLK_GATE_FORMAT(_var,						\
@@ -207,7 +203,7 @@ struct k230_pll {
 
 #define hw_to_k230_pll(_hw) container_of(_hw, struct k230_pll, hw)
 
-struct k230_clk_rate_self {
+struct k230_clk_rate {
 	struct clk_hw	hw;
 	void __iomem	*reg;
 	bool		read_only;
@@ -222,11 +218,16 @@ struct k230_clk_rate_self {
 	u32		div_mask;
 	/* ensures mutual exclusion for concurrent register access. */
 	spinlock_t	*lock;
+
+	u32		reg_off;
+	/* second register address restoring divider to calculate rate */
+	u32		reg_off2;
+
 };
 
-#define hw_to_k230_clk_rate_self(_hw)	container_of(_hw,			\
-					struct k230_clk_rate_self, hw)
+#define hw_to_k230_clk_rate(_hw) container_of(_hw, struct k230_clk_rate, hw)
 
+#if 0
 struct k230_clk_rate {
 	u32				reg_off;
 	/* second register address restoring divider to calculate rate */
@@ -239,6 +240,7 @@ static inline struct k230_clk_rate *hw_to_k230_clk_rate(struct clk_hw *hw)
 	return container_of(hw_to_k230_clk_rate_self(hw), struct k230_clk_rate,
 			    clk);
 }
+#endif
 
 struct k230_clk_gate {
 	u32			reg_off;
@@ -370,11 +372,11 @@ K230_CLK_RATE_FORMAT(cpu0_axi_rate,
 		     1, 8, 6, 0x7,
 		     0x0, 31, div, 0x0,
 		     0, 0,
-		     cpu0_src_rate.clk);
+		     cpu0_src_rate);
 
 K230_CLK_GATE_FORMAT(cpu0_plic_gate,
 		     0x0, 9, 0, 0,
-		     cpu0_src_rate.clk);
+		     cpu0_src_rate);
 
 K230_CLK_RATE_FORMAT(cpu0_plic_rate,
 		     1, 1, 0, 0,
@@ -385,7 +387,7 @@ K230_CLK_RATE_FORMAT(cpu0_plic_rate,
 
 K230_CLK_GATE_FORMAT(cpu0_noc_ddrcp4_gate,
 		     0x60, 7, 0, 0,
-		     cpu0_src_rate.clk);
+		     cpu0_src_rate);
 
 K230_CLK_GATE_FORMAT(cpu0_apb_gate,
 		     0x0, 13, 0, 0,
@@ -424,11 +426,11 @@ K230_CLK_RATE_FORMAT(cpu1_axi_rate,
 		     1, 8, 12, 0x7,
 		     0x4, 31, div, 0x0,
 		     false, 0,
-		     cpu1_src_rate.clk);
+		     cpu1_src_rate);
 
 K230_CLK_GATE_FORMAT(cpu1_plic_gate,
 		     0x4, 15, CLK_IGNORE_UNUSED, 0,
-		     cpu1_src_rate.clk);
+		     cpu1_src_rate);
 
 K230_CLK_RATE_FORMAT(cpu1_plic_rate,
 		     1, 1, 0, 0,
@@ -461,11 +463,11 @@ K230_CLK_RATE_FORMAT(hs_hclk_high_src_rate,
 
 K230_CLK_GATE_FORMAT(hs_hclk_high_gate,
 		     0x18, 1, 0, 0,
-		     hs_hclk_high_src_rate.clk);
+		     hs_hclk_high_src_rate);
 
 K230_CLK_GATE_FORMAT(hs_hclk_src_gate,
 		     0x18, 1, 0, 0,
-		     hs_hclk_high_src_rate.clk);
+		     hs_hclk_high_src_rate);
 
 K230_CLK_RATE_FORMAT(hs_hclk_src_rate,
 		     1, 1, 0, 0,
@@ -476,27 +478,27 @@ K230_CLK_RATE_FORMAT(hs_hclk_src_rate,
 
 K230_CLK_GATE_FORMAT(hs_sd0_ahb_gate,
 		     0x18, 2, 0, 0,
-		     hs_hclk_src_rate.clk);
+		     hs_hclk_src_rate);
 
 K230_CLK_GATE_FORMAT(hs_sd1_ahb_gate,
 		     0x18, 3, 0, 0,
-		     hs_hclk_src_rate.clk);
+		     hs_hclk_src_rate);
 
 K230_CLK_GATE_FORMAT(hs_ssi1_ahb_gate,
 		     0x18, 7, 0, 0,
-		     hs_hclk_src_rate.clk);
+		     hs_hclk_src_rate);
 
 K230_CLK_GATE_FORMAT(hs_ssi2_ahb_gate,
 		     0x18, 8, 0, 0,
-		     hs_hclk_src_rate.clk);
+		     hs_hclk_src_rate);
 
 K230_CLK_GATE_FORMAT(hs_usb0_ahb_gate,
 		     0x18, 4, 0, 0,
-		     hs_hclk_src_rate.clk);
+		     hs_hclk_src_rate);
 
 K230_CLK_GATE_FORMAT(hs_usb1_ahb_gate,
 		     0x18, 5, 0, 0,
-		     hs_hclk_src_rate.clk);
+		     hs_hclk_src_rate);
 
 K230_CLK_GATE_FORMAT(hs_ssi0_axi_gate,
 		     0x18, 27, 0, 0,
@@ -544,11 +546,11 @@ K230_CLK_RATE_FORMAT(hs_qspi_axi_src_rate,
 
 K230_CLK_GATE_FORMAT(hs_ssi1_axi_gate,
 		     0x18, 29, 0, 0,
-		     hs_qspi_axi_src_rate.clk);
+		     hs_qspi_axi_src_rate);
 
 K230_CLK_GATE_FORMAT(hs_ssi2_axi_gate,
 		     0x18, 30, 0, 0,
-		     hs_qspi_axi_src_rate.clk);
+		     hs_qspi_axi_src_rate);
 
 K230_CLK_GATE_FORMAT(hs_sd_card_src_gate,
 		     0x18, 11, 0, 0,
@@ -563,11 +565,11 @@ K230_CLK_RATE_FORMAT(hs_sd_card_src_rate,
 
 K230_CLK_GATE_FORMAT(hs_sd0_card_gate,
 		     0x18, 15, 0, 0,
-		     hs_sd_card_src_rate.clk);
+		     hs_sd_card_src_rate);
 
 K230_CLK_GATE_FORMAT(hs_sd1_card_gate,
 		     0x18, 19, 0, 0,
-		     hs_sd_card_src_rate.clk);
+		     hs_sd_card_src_rate);
 
 K230_CLK_GATE_FORMAT(hs_sd_axi_src_gate,
 		     0x18, 9, 0, 0,
@@ -582,19 +584,19 @@ K230_CLK_RATE_FORMAT(hs_sd_axi_src_rate,
 
 K230_CLK_GATE_FORMAT(hs_sd0_axi_gate,
 		     0x18, 13, 0, 0,
-		     hs_sd_axi_src_rate.clk);
+		     hs_sd_axi_src_rate);
 
 K230_CLK_GATE_FORMAT(hs_sd1_axi_gate,
 		     0x18, 17, 0, 0,
-		     hs_sd_axi_src_rate.clk);
+		     hs_sd_axi_src_rate);
 
 K230_CLK_GATE_FORMAT(hs_sd0_base_gate,
 		     0x18, 14, 0, 0,
-		     hs_sd_axi_src_rate.clk);
+		     hs_sd_axi_src_rate);
 
 K230_CLK_GATE_FORMAT(hs_sd1_base_gate,
 		     0x18, 18, 0, 0,
-		     hs_sd_axi_src_rate.clk);
+		     hs_sd_axi_src_rate);
 
 static const struct clk_hw *k230_parents_hs_ospi_src_mux[] = {
 	&k230_pll0_div2.hw,
@@ -629,15 +631,15 @@ K230_CLK_RATE_FORMAT(hs_sd_timer_src_rate,
 
 K230_CLK_GATE_FORMAT(hs_sd0_timer_gate,
 		     0x18, 16, 0, 0,
-		     hs_sd_timer_src_rate.clk);
+		     hs_sd_timer_src_rate);
 
 K230_CLK_GATE_FORMAT(hs_sd1_timer_gate,
 		     0x18, 20, 0, 0,
-		     hs_sd_timer_src_rate.clk);
+		     hs_sd_timer_src_rate);
 
 static const struct clk_parent_data k230_parents_hs_usb0_ref_mux[] = {
 	{ .fw_name = "osc24m", },
-	{ .hw = &k230_hs_usb_ref_50m_rate.clk.hw },
+	{ .hw = &k230_hs_usb_ref_50m_rate.hw },
 };
 K230_CLK_MUX_FORMAT_PDATA(hs_usb0_ref_mux,
 			  0x18, 23, 0x1,
@@ -650,7 +652,7 @@ K230_CLK_GATE_FORMAT(hs_usb0_ref_gate,
 
 static const struct clk_parent_data k230_parents_hs_usb1_ref_mux[] = {
 	{ .fw_name = "osc24m", },
-	{ .hw = &k230_hs_usb_ref_50m_rate.clk.hw },
+	{ .hw = &k230_hs_usb_ref_50m_rate.hw },
 };
 K230_CLK_MUX_FORMAT_PDATA(hs_usb1_ref_mux,
 			  0x18, 23, 0x1,
@@ -674,75 +676,75 @@ K230_CLK_RATE_FORMAT(ls_apb_src_rate,
 
 K230_CLK_GATE_FORMAT(ls_uart0_apb_gate,
 		     0x24, 1, CLK_IS_CRITICAL, 0,
-		     ls_apb_src_rate.clk);
+		     ls_apb_src_rate);
 
 K230_CLK_GATE_FORMAT(ls_uart1_apb_gate,
 		     0x24, 2, CLK_IS_CRITICAL, 0,
-		     ls_apb_src_rate.clk);
+		     ls_apb_src_rate);
 
 K230_CLK_GATE_FORMAT(ls_uart2_apb_gate,
 		     0x24, 3, CLK_IS_CRITICAL, 0,
-		     ls_apb_src_rate.clk);
+		     ls_apb_src_rate);
 
 K230_CLK_GATE_FORMAT(ls_uart3_apb_gate,
 		     0x24, 4, CLK_IS_CRITICAL, 0,
-		     ls_apb_src_rate.clk);
+		     ls_apb_src_rate);
 
 K230_CLK_GATE_FORMAT(ls_uart4_apb_gate,
 		     0x24, 5, CLK_IS_CRITICAL, 0,
-		     ls_apb_src_rate.clk);
+		     ls_apb_src_rate);
 
 K230_CLK_GATE_FORMAT(ls_i2c0_apb_gate,
 		     0x24, 6, 0, 0,
-		     ls_apb_src_rate.clk);
+		     ls_apb_src_rate);
 
 K230_CLK_GATE_FORMAT(ls_i2c1_apb_gate,
 		     0x24, 7, 0, 0,
-		     ls_apb_src_rate.clk);
+		     ls_apb_src_rate);
 
 K230_CLK_GATE_FORMAT(ls_i2c2_apb_gate,
 		     0x24, 8, 0, 0,
-		     ls_apb_src_rate.clk);
+		     ls_apb_src_rate);
 
 K230_CLK_GATE_FORMAT(ls_i2c3_apb_gate,
 		     0x24, 9, 0, 0,
-		     ls_apb_src_rate.clk);
+		     ls_apb_src_rate);
 
 K230_CLK_GATE_FORMAT(ls_i2c4_apb_gate,
 		     0x24, 10, 0, 0,
-		     ls_apb_src_rate.clk);
+		     ls_apb_src_rate);
 
 K230_CLK_GATE_FORMAT(ls_gpio_apb_gate,
 		     0x24, 11, 0, 0,
-		     ls_apb_src_rate.clk);
+		     ls_apb_src_rate);
 
 K230_CLK_GATE_FORMAT(ls_pwm_apb_gate,
 		     0x24, 12, 0, 0,
-		     ls_apb_src_rate.clk);
+		     ls_apb_src_rate);
 
 K230_CLK_GATE_FORMAT(ls_jamlink0_apb_gate,
 		     0x28, 4, 0, 0,
-		     ls_apb_src_rate.clk);
+		     ls_apb_src_rate);
 
 K230_CLK_GATE_FORMAT(ls_jamlink1_apb_gate,
 		     0x28, 5, 0, 0,
-		     ls_apb_src_rate.clk);
+		     ls_apb_src_rate);
 
 K230_CLK_GATE_FORMAT(ls_jamlink2_apb_gate,
 		     0x28, 6, 0, 0,
-		     ls_apb_src_rate.clk);
+		     ls_apb_src_rate);
 
 K230_CLK_GATE_FORMAT(ls_jamlink3_apb_gate,
 		     0x28, 7, 0, 0,
-		     ls_apb_src_rate.clk);
+		     ls_apb_src_rate);
 
 K230_CLK_GATE_FORMAT(ls_audio_apb_gate,
 		     0x24, 13, 0, 0,
-		     ls_apb_src_rate.clk);
+		     ls_apb_src_rate);
 
 K230_CLK_GATE_FORMAT(ls_adc_apb_gate,
 		     0x24, 15, 0, 0,
-		     ls_apb_src_rate.clk);
+		     ls_apb_src_rate);
 
 K230_CLK_GATE_FORMAT(ls_codec_apb_gate,
 		     0x24, 14, 0, 0,
@@ -922,19 +924,19 @@ K230_CLK_RATE_FORMAT(ls_jamlinkco_src_rate,
 
 K230_CLK_GATE_FORMAT(ls_jamlink0co_gate,
 		     0x28, 0, 0, 0,
-		     ls_jamlinkco_src_rate.clk);
+		     ls_jamlinkco_src_rate);
 
 K230_CLK_GATE_FORMAT(ls_jamlink1co_gate,
 		     0x28, 1, 0, 0,
-		     ls_jamlinkco_src_rate.clk);
+		     ls_jamlinkco_src_rate);
 
 K230_CLK_GATE_FORMAT(ls_jamlink2co_gate,
 		     0x28, 2, 0, 0,
-		     ls_jamlinkco_src_rate.clk);
+		     ls_jamlinkco_src_rate);
 
 K230_CLK_GATE_FORMAT(ls_jamlink3co_gate,
 		     0x28, 3, 0, 0,
-		     ls_jamlinkco_src_rate.clk);
+		     ls_jamlinkco_src_rate);
 
 K230_CLK_GATE_FORMAT_FWNAME(ls_gpio_debounce_gate,
 			    0x24, 27, 0, 0,
@@ -1064,7 +1066,7 @@ K230_CLK_RATE_FORMAT(timer5_src_rate,
 
 static const struct clk_parent_data k230_parents_timer0_mux[] = {
 	{ .fw_name = "timer-pulse-in", },
-	{ .hw = &k230_timer0_src_rate.clk.hw },
+	{ .hw = &k230_timer0_src_rate.hw },
 };
 K230_CLK_MUX_FORMAT_PDATA(timer0_mux,
 			  0x50, 7, 0x1,
@@ -1077,7 +1079,7 @@ K230_CLK_GATE_FORMAT(timer0_gate,
 
 static const struct clk_parent_data k230_parents_timer1_mux[] = {
 	{ .fw_name = "timer-pulse-in", },
-	{ .hw = &k230_timer1_src_rate.clk.hw },
+	{ .hw = &k230_timer1_src_rate.hw },
 };
 K230_CLK_MUX_FORMAT_PDATA(timer1_mux,
 			  0x50, 8, 0x1,
@@ -1090,7 +1092,7 @@ K230_CLK_GATE_FORMAT(timer1_gate,
 
 static const struct clk_parent_data k230_parents_timer2_mux[] = {
 	{ .fw_name = "timer-pulse-in", },
-	{ .hw = &k230_timer2_src_rate.clk.hw },
+	{ .hw = &k230_timer2_src_rate.hw },
 };
 K230_CLK_MUX_FORMAT_PDATA(timer2_mux,
 			  0x50, 9, 0x1,
@@ -1103,7 +1105,7 @@ K230_CLK_GATE_FORMAT(timer2_gate,
 
 static const struct clk_parent_data k230_parents_timer3_mux[] = {
 	{ .fw_name = "timer-pulse-in", },
-	{ .hw = &k230_timer3_src_rate.clk.hw },
+	{ .hw = &k230_timer3_src_rate.hw },
 };
 K230_CLK_MUX_FORMAT_PDATA(timer3_mux,
 			  0x50, 10, 0x1,
@@ -1116,7 +1118,7 @@ K230_CLK_GATE_FORMAT(timer3_gate,
 
 static const struct clk_parent_data k230_parents_timer4_mux[] = {
 	{ .fw_name = "timer-pulse-in", },
-	{ .hw = &k230_timer4_src_rate.clk.hw },
+	{ .hw = &k230_timer4_src_rate.hw },
 };
 K230_CLK_MUX_FORMAT_PDATA(timer4_mux,
 			  0x50, 11, 0x1,
@@ -1129,7 +1131,7 @@ K230_CLK_GATE_FORMAT(timer4_gate,
 
 static const struct clk_parent_data k230_parents_timer5_mux[] = {
 	{ .fw_name = "timer-pulse-in", },
-	{ .hw = &k230_timer5_src_rate.clk.hw },
+	{ .hw = &k230_timer5_src_rate.hw },
 };
 K230_CLK_MUX_FORMAT_PDATA(timer5_mux,
 			  0x50, 12, 0x1,
@@ -1301,15 +1303,15 @@ K230_CLK_RATE_FORMAT(vpu_axi_src_rate,
 		     1, 16, 6, 0xF,
 		     0xC, 31, div, 0x0,
 		     false, 0,
-		     vpu_src_rate.clk);
+		     vpu_src_rate);
 
 K230_CLK_GATE_FORMAT(vpu_axi_gate,
 		     0xC, 5, 0, 0,
-		     vpu_axi_src_rate.clk);
+		     vpu_axi_src_rate);
 
 K230_CLK_GATE_FORMAT(vpu_ddrcp2_gate,
 		     0x60, 5, 0, 0,
-		     vpu_axi_src_rate.clk);
+		     vpu_axi_src_rate);
 
 K230_CLK_GATE_FORMAT(vpu_cfg_gate,
 		     0xC, 10, 0, 0,
@@ -1421,7 +1423,7 @@ K230_CLK_RATE_FORMAT(ai_src_rate,
 
 K230_CLK_GATE_FORMAT(ai_axi_gate,
 		     0x8, 10, 0, 0,
-		     ai_src_rate.clk);
+		     ai_src_rate);
 
 static const struct clk_hw *k230_parents_camera0_mux[] = {
 	&k230_pll1_div3.hw,
@@ -1624,14 +1626,12 @@ static unsigned long k230_clk_get_rate_mul(struct clk_hw *hw,
 					   unsigned long parent_rate)
 {
 	struct k230_clk_rate *clk = hw_to_k230_clk_rate(hw);
-	struct k230_clk_rate_self *rate_self = &clk->clk;
 	u32 mul = 1, div;
 
-	guard(spinlock)(rate_self->lock);
+	guard(spinlock)(clk->lock);
 
-	div = rate_self->div_max;
-	mul += (readl(rate_self->reg + clk->reg_off) >> rate_self->div_shift)
-		& rate_self->div_mask;
+	div = clk->div_max;
+	mul += (readl(clk->reg + clk->reg_off) >> clk->div_shift) & clk->div_mask;
 
 	return mul_u64_u32_div(parent_rate, mul, div);
 }
@@ -1640,14 +1640,12 @@ static unsigned long k230_clk_get_rate_div(struct clk_hw *hw,
 					   unsigned long parent_rate)
 {
 	struct k230_clk_rate *clk = hw_to_k230_clk_rate(hw);
-	struct k230_clk_rate_self *rate_self = &clk->clk;
 	u32 mul, div = 1;
 
-	guard(spinlock)(rate_self->lock);
+	guard(spinlock)(clk->lock);
 
-	mul = rate_self->mul_max;
-	div += (readl(rate_self->reg + clk->reg_off) >> rate_self->div_shift)
-		& rate_self->div_mask;
+	mul = clk->mul_max;
+	div += (readl(clk->reg + clk->reg_off) >> clk->div_shift) & clk->div_mask;
 
 	return mul_u64_u32_div(parent_rate, mul, div);
 }
@@ -1656,19 +1654,16 @@ static unsigned long k230_clk_get_rate_mul_div(struct clk_hw *hw,
 					       unsigned long parent_rate)
 {
 	struct k230_clk_rate *clk = hw_to_k230_clk_rate(hw);
-	struct k230_clk_rate_self *rate_self = &clk->clk;
 	u32 mul, div, reg_off, reg_off2;
 
-	guard(spinlock)(rate_self->lock);
+	guard(spinlock)(clk->lock);
 
 	reg_off = clk->reg_off;
 	reg_off2 = clk->reg_off2 ? clk->reg_off2 : reg_off;
 
-	mul = (readl(rate_self->reg + reg_off2) >> rate_self->mul_shift)
-		& rate_self->mul_mask;
+	mul = (readl(clk->reg + reg_off2) >> clk->mul_shift) & clk->mul_mask;
 
-	div = (readl(rate_self->reg + reg_off) >> rate_self->div_shift)
-		& rate_self->div_mask;
+	div = (readl(clk->reg + reg_off) >> clk->div_shift) & clk->div_mask;
 
 	return mul_u64_u32_div(parent_rate, mul, div);
 }
@@ -1841,11 +1836,11 @@ static int k230_clk_find_approximate_mul_div(struct k230_clk_rate *clk,
 static long k230_clk_round_rate_mul(struct clk_hw *hw, unsigned long rate,
 				    unsigned long *parent_rate)
 {
-	struct k230_clk_rate_self *rate_self = hw_to_k230_clk_rate_self(hw);
+	struct k230_clk_rate *rate_clk = hw_to_k230_clk_rate(hw);
 	u32 div, mul;
 
-	if (k230_clk_find_approximate_mul(rate_self->mul_min, rate_self->mul_max,
-					  rate_self->div_min, rate_self->div_max,
+	if (k230_clk_find_approximate_mul(rate_clk->mul_min, rate_clk->mul_max,
+					  rate_clk->div_min, rate_clk->div_max,
 					  rate, *parent_rate, &div, &mul))
 		return 0;
 
@@ -1855,11 +1850,11 @@ static long k230_clk_round_rate_mul(struct clk_hw *hw, unsigned long rate,
 static long k230_clk_round_rate_div(struct clk_hw *hw, unsigned long rate,
 				    unsigned long *parent_rate)
 {
-	struct k230_clk_rate_self *rate_self = hw_to_k230_clk_rate_self(hw);
+	struct k230_clk_rate *rate_clk = hw_to_k230_clk_rate(hw);
 	u32 div, mul;
 
-	if (k230_clk_find_approximate_div(rate_self->mul_min, rate_self->mul_max,
-					  rate_self->div_min, rate_self->div_max,
+	if (k230_clk_find_approximate_div(rate_clk->mul_min, rate_clk->mul_max,
+					  rate_clk->div_min, rate_clk->div_max,
 					  rate, *parent_rate, &div, &mul))
 		return 0;
 
@@ -1870,12 +1865,11 @@ static long k230_clk_round_rate_mul_div(struct clk_hw *hw, unsigned long rate,
 					unsigned long *parent_rate)
 {
 	struct k230_clk_rate *clk = hw_to_k230_clk_rate(hw);
-	struct k230_clk_rate_self *rate_self = &clk->clk;
 	u32 div, mul;
 
 	if (k230_clk_find_approximate_mul_div(clk,
-					      rate_self->mul_min, rate_self->mul_max,
-					      rate_self->div_min, rate_self->div_max,
+					      clk->mul_min, clk->mul_max,
+					      clk->div_min, clk->div_max,
 					      rate, *parent_rate, &div, &mul))
 		return 0;
 
@@ -1886,27 +1880,26 @@ static int k230_clk_set_rate_mul(struct clk_hw *hw, unsigned long rate,
 				 unsigned long parent_rate)
 {
 	struct k230_clk_rate *clk = hw_to_k230_clk_rate(hw);
-	struct k230_clk_rate_self *rate_self = &clk->clk;
 	u32 div, mul, reg;
 
 	if (rate > parent_rate)
 		return -EINVAL;
 
-	if (rate_self->read_only)
+	if (clk->read_only)
 		return 0;
 
-	if (k230_clk_find_approximate_mul(rate_self->mul_min, rate_self->mul_max,
-					  rate_self->div_min, rate_self->div_max,
+	if (k230_clk_find_approximate_mul(clk->mul_min, clk->mul_max,
+					  clk->div_min, clk->div_max,
 					  rate, parent_rate, &div, &mul))
 		return -EINVAL;
 
-	guard(spinlock)(rate_self->lock);
+	guard(spinlock)(clk->lock);
 
-	reg = readl(rate_self->reg + clk->reg_off);
-	reg &= ~((rate_self->div_mask) << (rate_self->div_shift));
-	reg |= ((mul - 1) & rate_self->div_mask) << (rate_self->div_shift);
-	reg |= BIT(rate_self->write_enable_bit);
-	writel(reg, rate_self->reg + clk->reg_off);
+	reg = readl(clk->reg + clk->reg_off);
+	reg &= ~((clk->div_mask) << (clk->div_shift));
+	reg |= ((mul - 1) & clk->div_mask) << (clk->div_shift);
+	reg |= BIT(clk->write_enable_bit);
+	writel(reg, clk->reg + clk->reg_off);
 
 	return 0;
 }
@@ -1915,28 +1908,27 @@ static int k230_clk_set_rate_div(struct clk_hw *hw, unsigned long rate,
 				 unsigned long parent_rate)
 {
 	struct k230_clk_rate *clk = hw_to_k230_clk_rate(hw);
-	struct k230_clk_rate_self *rate_self = &clk->clk;
 	u32 div, mul, reg;
 
 	if (rate > parent_rate)
 		return -EINVAL;
 
-	if (rate_self->read_only)
+	if (clk->read_only)
 		return 0;
 
-	if (k230_clk_find_approximate_div(rate_self->mul_min, rate_self->mul_max,
-					  rate_self->div_min, rate_self->div_max,
+	if (k230_clk_find_approximate_div(clk->mul_min, clk->mul_max,
+					  clk->div_min, clk->div_max,
 					  rate, parent_rate, &div, &mul))
 		return -EINVAL;
 
-	guard(spinlock)(rate_self->lock);
+	guard(spinlock)(clk->lock);
 
-	reg = readl(rate_self->reg + clk->reg_off);
-	reg &= ~((rate_self->div_mask) << (rate_self->div_shift));
-	reg &= ~((rate_self->mul_mask) << (rate_self->mul_shift));
-	reg |= ((div - 1) & rate_self->div_mask) << (rate_self->div_shift);
-	reg |= BIT(rate_self->write_enable_bit);
-	writel(reg, rate_self->reg + clk->reg_off);
+	reg = readl(clk->reg + clk->reg_off);
+	reg &= ~((clk->div_mask) << (clk->div_shift));
+	reg &= ~((clk->mul_mask) << (clk->mul_shift));
+	reg |= ((div - 1) & clk->div_mask) << (clk->div_shift);
+	reg |= BIT(clk->write_enable_bit);
+	writel(reg, clk->reg + clk->reg_off);
 
 	return 0;
 }
@@ -1945,40 +1937,39 @@ static int k230_clk_set_rate_mul_div(struct clk_hw *hw, unsigned long rate,
 				     unsigned long parent_rate)
 {
 	struct k230_clk_rate *clk = hw_to_k230_clk_rate(hw);
-	struct k230_clk_rate_self *rate_self = &clk->clk;
 	u32 div, mul, reg, reg_c;
 
 	if (rate > parent_rate)
 		return -EINVAL;
 
-	if (rate_self->read_only)
+	if (clk->read_only)
 		return 0;
 
 	if (k230_clk_find_approximate_mul_div(clk,
-					      rate_self->mul_min, rate_self->mul_max,
-					      rate_self->div_min, rate_self->div_max,
+					      clk->mul_min, clk->mul_max,
+					      clk->div_min, clk->div_max,
 					      rate, parent_rate, &div, &mul))
 		return -EINVAL;
 
-	guard(spinlock)(rate_self->lock);
+	guard(spinlock)(clk->lock);
 
-	reg = readl(rate_self->reg + clk->reg_off);
-	reg &= ~((rate_self->div_mask) << (rate_self->div_shift));
+	reg = readl(clk->reg + clk->reg_off);
+	reg &= ~((clk->div_mask) << (clk->div_shift));
 
 	if (!clk->reg_off2) {
-		reg |= (mul & rate_self->mul_mask) << (rate_self->mul_shift);
-		reg |= (div & rate_self->div_mask) << (rate_self->div_shift);
-		reg |= BIT(rate_self->write_enable_bit);
+		reg |= (mul & clk->mul_mask) << (clk->mul_shift);
+		reg |= (div & clk->div_mask) << (clk->div_shift);
+		reg |= BIT(clk->write_enable_bit);
 	} else {
-		reg_c = readl(rate_self->reg + clk->reg_off2);
-		reg_c &= ~((rate_self->mul_mask) << (rate_self->mul_shift));
-		reg_c |= (mul & rate_self->mul_mask) << (rate_self->mul_shift);
-		reg_c |= BIT(rate_self->write_enable_bit);
-		writel(reg_c, rate_self->reg + clk->reg_off2);
+		reg_c = readl(clk->reg + clk->reg_off2);
+		reg_c &= ~((clk->mul_mask) << (clk->mul_shift));
+		reg_c |= (mul & clk->mul_mask) << (clk->mul_shift);
+		reg_c |= BIT(clk->write_enable_bit);
+		writel(reg_c, clk->reg + clk->reg_off2);
 	}
 
-	reg |= (div & rate_self->div_mask) << (rate_self->div_shift);
-	writel(reg, rate_self->reg + clk->reg_off);
+	reg |= (div & clk->div_mask) << (clk->div_shift);
+	writel(reg, clk->reg + clk->reg_off);
 
 	return 0;
 }
@@ -2029,10 +2020,10 @@ static inline int k230_register_clk_rate(int id, struct k230_clk_rate *clk,
 					 spinlock_t *lock, void __iomem *reg)
 {
 	int ret;
-	struct clk_hw *hw = &clk->clk.hw;
+	struct clk_hw *hw = &clk->hw;
 
-	clk->clk.lock = lock;
-	clk->clk.reg = reg;
+	clk->lock = lock;
+	clk->reg = reg;
 
 	ret = devm_clk_hw_register(dev, hw);
 	if (ret)
