@@ -73,12 +73,10 @@
 
 #define K230_CLK_PLL_FORMAT(_var, _id, _flags, _parent)				\
 	static struct k230_pll k230_##_var = {					\
-		.clk = {							\
-			.hw.init = CLK_HW_INIT_FW_NAME(#_var,			\
-				   _parent,					\
-				   &k230_pll_ops, _flags),			\
-			.id = _id,						\
-		},								\
+		.hw.init = CLK_HW_INIT_FW_NAME(#_var,				\
+					       _parent,				\
+					       &k230_pll_ops, _flags),		\
+		.id = _id,							\
 	}
 
 #define K230_CLK_RATE_FORMAT(_var,						\
@@ -199,7 +197,7 @@
 		},								\
 	}
 
-struct k230_pll_self {
+struct k230_pll {
 	struct clk_hw	hw;
 	void __iomem	*reg;
 	/* ensures mutual exclusion for concurrent register access. */
@@ -207,11 +205,7 @@ struct k230_pll_self {
 	int id;
 };
 
-struct k230_pll {
-	struct k230_pll_self	clk;
-};
-
-#define hw_to_k230_pll_self(_hw) container_of(_hw, struct k230_pll_self, hw)
+#define hw_to_k230_pll(_hw) container_of(_hw, struct k230_pll, hw)
 
 struct k230_clk_rate_self {
 	struct clk_hw	hw;
@@ -328,19 +322,19 @@ struct k230_pll *k230_plls[] = {
 
 #define K230_PLL_NUM ARRAY_SIZE(k230_plls)
 
-K230_CLK_FIXED_FACTOR_FORMAT(pll0_div2, 2, 0, pll0.clk);
-K230_CLK_FIXED_FACTOR_FORMAT(pll0_div3, 3, 0, pll0.clk);
-K230_CLK_FIXED_FACTOR_FORMAT(pll0_div4, 4, 0, pll0.clk);
-K230_CLK_FIXED_FACTOR_FORMAT(pll0_div16, 16, 0, pll0.clk);
-K230_CLK_FIXED_FACTOR_FORMAT(pll1_div2, 2, 0, pll1.clk);
-K230_CLK_FIXED_FACTOR_FORMAT(pll1_div3, 3, 0, pll1.clk);
-K230_CLK_FIXED_FACTOR_FORMAT(pll1_div4, 4, 0, pll1.clk);
-K230_CLK_FIXED_FACTOR_FORMAT(pll2_div2, 2, 0, pll2.clk);
-K230_CLK_FIXED_FACTOR_FORMAT(pll2_div3, 3, 0, pll2.clk);
-K230_CLK_FIXED_FACTOR_FORMAT(pll2_div4, 4, 0, pll2.clk);
-K230_CLK_FIXED_FACTOR_FORMAT(pll3_div2, 2, 0, pll3.clk);
-K230_CLK_FIXED_FACTOR_FORMAT(pll3_div3, 3, 0, pll3.clk);
-K230_CLK_FIXED_FACTOR_FORMAT(pll3_div4, 4, 0, pll3.clk);
+K230_CLK_FIXED_FACTOR_FORMAT(pll0_div2, 2, 0, pll0);
+K230_CLK_FIXED_FACTOR_FORMAT(pll0_div3, 3, 0, pll0);
+K230_CLK_FIXED_FACTOR_FORMAT(pll0_div4, 4, 0, pll0);
+K230_CLK_FIXED_FACTOR_FORMAT(pll0_div16, 16, 0, pll0);
+K230_CLK_FIXED_FACTOR_FORMAT(pll1_div2, 2, 0, pll1);
+K230_CLK_FIXED_FACTOR_FORMAT(pll1_div3, 3, 0, pll1);
+K230_CLK_FIXED_FACTOR_FORMAT(pll1_div4, 4, 0, pll1);
+K230_CLK_FIXED_FACTOR_FORMAT(pll2_div2, 2, 0, pll2);
+K230_CLK_FIXED_FACTOR_FORMAT(pll2_div3, 3, 0, pll2);
+K230_CLK_FIXED_FACTOR_FORMAT(pll2_div4, 4, 0, pll2);
+K230_CLK_FIXED_FACTOR_FORMAT(pll3_div2, 2, 0, pll3);
+K230_CLK_FIXED_FACTOR_FORMAT(pll3_div3, 3, 0, pll3);
+K230_CLK_FIXED_FACTOR_FORMAT(pll3_div4, 4, 0, pll3);
 
 struct clk_fixed_factor *k230_pll_divs[] = {
 	K230_FMT(pll0_div2),
@@ -406,8 +400,8 @@ K230_CLK_RATE_FORMAT(cpu0_apb_rate,
 
 static const struct clk_hw *k230_parents_cpu1_src_mux[] = {
 	&k230_pll0_div2.hw,
-	&k230_pll3.clk.hw,
-	&k230_pll0.clk.hw,
+	&k230_pll3.hw,
+	&k230_pll0.hw,
 };
 K230_CLK_MUX_FORMAT(cpu1_src_mux,
 		     0x4, 1, 0x3,
@@ -1363,7 +1357,7 @@ K230_CLK_RATE_FORMAT(sec_axi_rate,
 
 K230_CLK_GATE_FORMAT(usb_480m_gate,
 		     0x100, 0, 0, 0,
-		     pll1.clk);
+		     pll1);
 
 K230_CLK_RATE_FORMAT(usb_480m_rate,
 		     1, 1, 0, 0,
@@ -1385,7 +1379,7 @@ K230_CLK_RATE_FORMAT(usb_100m_rate,
 
 K230_CLK_GATE_FORMAT(dphy_dft_gate,
 		     0x100, 0, 0, 0,
-		     pll0.clk);
+		     pll0);
 
 K230_CLK_RATE_FORMAT(dphy_dft_rate,
 		     1, 1, 0, 0,
@@ -1494,7 +1488,7 @@ K230_CLK_RATE_FORMAT(camera2_rate,
 
 static int k230_pll_prepare(struct clk_hw *hw)
 {
-	struct k230_pll_self *pll = hw_to_k230_pll_self(hw);
+	struct k230_pll *pll = hw_to_k230_pll(hw);
 	u32 reg;
 
 	/* wait for PLL lock until it reaches lock status */
@@ -1503,12 +1497,12 @@ static int k230_pll_prepare(struct clk_hw *hw)
 				  K230_PLL_LOCK_TIME_DELAY, K230_PLL_LOCK_TIMEOUT);
 }
 
-static inline bool k230_pll_hw_is_enabled(struct k230_pll_self *pll)
+static inline bool k230_pll_hw_is_enabled(struct k230_pll *pll)
 {
 	return readl(K230_PLLX_GATE_ADDR(pll->reg, pll->id)) & K230_PLL_GATE_ENABLE;
 }
 
-static void k230_pll_enable_hw(struct k230_pll_self *pll)
+static void k230_pll_enable_hw(struct k230_pll *pll)
 {
 	u32 reg;
 
@@ -1523,7 +1517,7 @@ static void k230_pll_enable_hw(struct k230_pll_self *pll)
 
 static int k230_pll_enable(struct clk_hw *hw)
 {
-	struct k230_pll_self *pll = hw_to_k230_pll_self(hw);
+	struct k230_pll *pll = hw_to_k230_pll(hw);
 
 	guard(spinlock)(pll->lock);
 
@@ -1534,7 +1528,7 @@ static int k230_pll_enable(struct clk_hw *hw)
 
 static void k230_pll_disable(struct clk_hw *hw)
 {
-	struct k230_pll_self *pll = hw_to_k230_pll_self(hw);
+	struct k230_pll *pll = hw_to_k230_pll(hw);
 	u32 reg;
 
 	guard(spinlock)(pll->lock);
@@ -1547,12 +1541,12 @@ static void k230_pll_disable(struct clk_hw *hw)
 
 static int k230_pll_is_enabled(struct clk_hw *hw)
 {
-	return k230_pll_hw_is_enabled(hw_to_k230_pll_self(hw));
+	return k230_pll_hw_is_enabled(hw_to_k230_pll(hw));
 }
 
 static unsigned long k230_pll_get_rate(struct clk_hw *hw, unsigned long parent_rate)
 {
-	struct k230_pll_self *pll = hw_to_k230_pll_self(hw);
+	struct k230_pll *pll = hw_to_k230_pll(hw);
 	u32 reg;
 	u32 r, f, od;
 
@@ -1578,12 +1572,12 @@ static int k230_register_plls(struct platform_device *pdev, spinlock_t *lock,
 			      void __iomem *reg)
 {
 	int i, ret;
-	struct k230_pll_self *pll;
+	struct k230_pll *pll;
 
 	for (i = 0; i < K230_PLL_NUM; i++) {
 		const char *name;
 
-		pll = &k230_plls[i]->clk;
+		pll = k230_plls[i];
 
 		name = pll->hw.init->name;
 		pll->lock = lock;
