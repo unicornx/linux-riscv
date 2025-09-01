@@ -43,7 +43,7 @@ config PCIE_CADENCE_PLAT_EP
 	  different vendors SoCs.
 
 config PCIE_SG2042
-	bool "Sophgo SG2042 PCIe controller (host mode)"
+	tristate "Sophgo SG2042 PCIe controller (host mode)"
 	depends on ARCH_SOPHGO || COMPILE_TEST
 	depends on OF
 	depends on PCI_MSI

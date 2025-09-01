@@ -42,7 +42,7 @@ static int sg2042_pcie_probe(struct platform_device *pdev)
 
 	bridge = devm_pci_alloc_host_bridge(dev, sizeof(*rc));
 	if (!bridge) {
-		dev_err(dev, "Failed to alloc host bridge!\n");
+		dev_err_probe(dev, -ENOMEM, "Failed to alloc host bridge!\n");
 		return -ENOMEM;
 	}
 
@@ -55,47 +55,31 @@ static int sg2042_pcie_probe(struct platform_device *pdev)
 
 	platform_set_drvdata(pdev, pcie);
 
-	pm_runtime_enable(dev);
-
-	ret = pm_runtime_get_sync(dev);
-	if (ret < 0) {
-		dev_err(dev, "pm_runtime_get_sync failed\n");
-		goto err_get_sync;
-	}
+	pm_runtime_set_active(dev);
+	pm_runtime_no_callbacks(dev);
+	devm_pm_runtime_enable(dev);
 
 	ret = cdns_pcie_init_phy(dev, pcie);
 	if (ret) {
-		dev_err(dev, "Failed to init phy!\n");
-		goto err_get_sync;
+		dev_err_probe(dev, ret, "Failed to init phy!\n");
+		return ret;
 	}
 
 	ret = cdns_pcie_host_setup(rc);
-	if (ret < 0) {
-		dev_err(dev, "Failed to setup host!\n");
-		goto err_host_setup;
+	if (ret) {
+		dev_err_probe(dev, ret, "Failed to setup host!\n");
+		cdns_pcie_disable_phy(pcie);
+		return ret;
 	}
 
 	return 0;
-
-err_host_setup:
-	cdns_pcie_disable_phy(pcie);
-
-err_get_sync:
-	pm_runtime_put(dev);
-	pm_runtime_disable(dev);
-
-	return ret;
 }
 
-static void sg2042_pcie_shutdown(struct platform_device *pdev)
+static void sg2042_pcie_remove(struct platform_device *pdev)
 {
 	struct cdns_pcie *pcie = platform_get_drvdata(pdev);
-	struct device *dev = &pdev->dev;
 
 	cdns_pcie_disable_phy(pcie);
-
-	pm_runtime_put(dev);
-	pm_runtime_disable(dev);
 }
 
 static const struct of_device_id sg2042_pcie_of_match[] = {
@@ -110,6 +94,10 @@ static struct platform_driver sg2042_pcie_driver = {
 		.pm		= &cdns_pcie_pm_ops,
 	},
 	.probe		= sg2042_pcie_probe,
-	.shutdown	= sg2042_pcie_shutdown,
+	.remove		= sg2042_pcie_remove,
 };
-builtin_platform_driver(sg2042_pcie_driver);
+module_platform_driver(sg2042_pcie_driver);
+
+MODULE_LICENSE("GPL");
+MODULE_DESCRIPTION("PCIe controller driver for SG2042 SoCs");
+MODULE_AUTHOR("Chen Wang <unicorn_wang@outlook.com>");
