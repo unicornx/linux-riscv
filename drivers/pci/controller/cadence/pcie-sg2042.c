@@ -6,8 +6,7 @@
  * Copyright (C) 2025 Chen Wang <unicorn_wang@outlook.com>
  */
 
-#include <linux/kernel.h>
-#include <linux/of.h>
+#include <linux/mod_devicetable.h>
 #include <linux/pci.h>
 #include <linux/platform_device.h>
 #include <linux/pm_runtime.h>
@@ -15,37 +14,22 @@
 #include "pcie-cadence.h"
 
 /*
- * SG2042 only support 4-byte aligned access, so for the rootbus (i.e. to read
- * the Root Port itself, read32 is required. For non-rootbus (i.e. to read
- * the PCIe peripheral registers, supports 1/2/4 byte aligned access, so
- * directly using read should be fine.
- *
- * The same is true for write.
+ * SG2042 only supports 4-byte aligned access, so for the rootbus (i.e. to
+ * read/write the Root Port itself, read32/write32 is required. For
+ * non-rootbus (i.e. to read/write the PCIe peripheral registers, supports
+ * 1/2/4 byte aligned access, so directly using read/write should be fine.
  */
-static int sg2042_pcie_config_read(struct pci_bus *bus, unsigned int devfn,
-				   int where, int size, u32 *value)
-{
-	if (pci_is_root_bus(bus))
-		return pci_generic_config_read32(bus, devfn, where, size,
-						 value);
 
-	return pci_generic_config_read(bus, devfn, where, size, value);
-}
-
-static int sg2042_pcie_config_write(struct pci_bus *bus, unsigned int devfn,
-				    int where, int size, u32 value)
-{
-	if (pci_is_root_bus(bus))
-		return pci_generic_config_write32(bus, devfn, where, size,
-						  value);
-
-	return pci_generic_config_write(bus, devfn, where, size, value);
-}
-
-static struct pci_ops sg2042_pcie_host_ops = {
+static struct pci_ops sg2042_pcie_root_ops = {
 	.map_bus	= cdns_pci_map_bus,
-	.read		= sg2042_pcie_config_read,
-	.write		= sg2042_pcie_config_write,
+	.read		= pci_generic_config_read32,
+	.write		= pci_generic_config_write32,
+};
+
+static struct pci_ops sg2042_pcie_child_ops = {
+	.map_bus	= cdns_pci_map_bus,
+	.read		= pci_generic_config_read,
+	.write		= pci_generic_config_write,
 };
 
 static int sg2042_pcie_probe(struct platform_device *pdev)
@@ -56,17 +40,14 @@ static int sg2042_pcie_probe(struct platform_device *pdev)
 	struct cdns_pcie_rc *rc;
 	int ret;
 
-	pcie = devm_kzalloc(dev, sizeof(*pcie), GFP_KERNEL);
-	if (!pcie)
-		return -ENOMEM;
-
 	bridge = devm_pci_alloc_host_bridge(dev, sizeof(*rc));
 	if (!bridge) {
 		dev_err(dev, "Failed to alloc host bridge!\n");
 		return -ENOMEM;
 	}
 
-	bridge->ops = &sg2042_pcie_host_ops;
+	bridge->ops = &sg2042_pcie_root_ops;
+	bridge->child_ops = &sg2042_pcie_child_ops;
 
 	rc = pci_host_bridge_priv(bridge);
 	pcie = &rc->pcie;
