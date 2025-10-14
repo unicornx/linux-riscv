@@ -13,7 +13,7 @@
 	compatible = "milkv,pioneer", "sophgo,sg2042";
 
 	chosen {
-		bootargs = "console=ttyS0,115200 console=tty1 earlycon";
+		bootargs = "console=ttyS0,115200 console=tty1 earlycon pcie_aspm=off";
 		stdout-path = "serial0";
 	};
 
